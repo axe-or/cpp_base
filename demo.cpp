@@ -20,16 +20,31 @@ std::ostream& operator<<(std::ostream& os, String s){
 	return os;
 }
 
-struct rune_wrapper {
-	rune r;
-	explicit rune_wrapper(rune r) : r(r){}
+struct Codepoint {
+	rune value;
+	explicit Codepoint(rune r) : value(r){}
 };
 
-std::ostream& operator<<(std::ostream& os, rune_wrapper r){
-	auto res = utf8::encode(r.r);
+std::ostream& operator<<(std::ostream& os, Codepoint r){
+	auto res = utf8::encode(r.value);
 	char buf[5] = {0};
 	mem::copy(buf, res.bytes, res.len);
 	os << buf;
+	return os;
+}
+
+template<typename T>
+std::ostream& operator<<(std::ostream& os, Slice<T> s){
+	if(s.size() == 0){
+		os << "[]";
+		return os;
+	}
+
+	os << '[';
+	for(isize i = 0; i < (s.size() - 1); i ++){
+		os << s[i] << ' ';
+	}
+	os << s[s.size() - 1] << ']';
 	return os;
 }
 
@@ -39,7 +54,7 @@ int main(){
 
 	auto it = s.iterator();
 	for(rune r = it.next(); r != 0; r = it.next()){
-		print(rune_wrapper(r));
+		print(Codepoint(r));
 	}
     return 0;
 }

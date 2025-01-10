@@ -198,7 +198,7 @@ enum class Allocator_Op : byte {
 	Resize   = 2, // Resize an allocation in-place
 	Free     = 3, // Mark allocation as free
 	Free_All = 4, // Mark allocations as free
-	Realloc  = 5, // Re-allocate pointer
+	// Realloc  = 5, // Re-allocate pointer
 };
 
 enum class Allocator_Capability : u32 {
@@ -214,7 +214,8 @@ using Allocator_Func = void* (*) (
 	void* impl,
 	Allocator_Op op,
 	void* old_ptr,
-	isize size, isize align,
+	isize size,
+	isize align,
 	u32* capabilities
 );
 
@@ -260,9 +261,9 @@ struct Allocator {
 	// Re-allocate, unlike resize(), the pointer may change, returns null on
 	// failure, if allocation is moved somewhere else, the previous pointer
 	// is freed.
-	void* realloc(void* ptr, isize new_size, isize align){
-		return _func(_impl, Allocator_Op::Realloc, ptr, new_size, align, nullptr);
-	}
+	// void* realloc(void* ptr, isize new_size, isize align){
+	// 	return _func(_impl, Allocator_Op::Realloc, ptr, new_size, align, nullptr);
+	// }
 };
 
 // Set n bytes of p to value.
@@ -418,4 +419,36 @@ struct String {
 		return mem::compare(_data, lhs._data, _length) == 0;
 	}
 };
+
+//// Arena Allocator ///////////////////////////////////////////////////////////
+namespace mem {
+struct Arena {
+	isize offset;
+	isize capacity;
+	uintptr last_allocation;
+	byte* data;
+
+	// Resize arena allocation in-place, gives back same pointer on success, null on failure
+	void* resize(void* ptr, isize new_size);
+
+	// Reset arena, marking all its owned pointers as freed
+	void free_all();
+
+	// Allocate `size` bytes aligned to `align`, return null on failure
+	void* alloc(isize size, isize align);
+
+	// Get arena as a conforming instance to the allocator interface
+	Allocator allocator();
+
+	// Initialize a memory arena with a buffer
+	static Arena from_buffer(Slice<byte> s);
+};
+
+} /* Namespace mem */
+
+//// Heap Allocator ////////////////////////////////////////////////////////////
+namespace mem {
+// Just a wrapper around aligned_alloc and free
+Allocator heap_allocator();
+} /* Namespace mem */
 
