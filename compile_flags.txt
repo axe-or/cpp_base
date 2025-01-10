@@ -1,1 +1,6 @@
+-I.
+-Wall
+-Wextra
+-Wno-unused-label
 -std=c++17
+-DBASE_IMPLEMENTATION

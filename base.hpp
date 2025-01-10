@@ -1,6 +1,5 @@
 #pragma once
 
-//// Includes //////////////////////////////////////////////////////////////////
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -36,7 +35,7 @@ using usize = size_t;
 using uintptr = uintptr_t;
 
 using f32 = float;
-using f64 = double; 
+using f64 = double;
 
 using cstring = char const *;
 
@@ -92,15 +91,17 @@ static_assert(sizeof(void(*)(void)) == sizeof(uintptr), "Mismatched pointer type
 static_assert(CHAR_BIT == 8, "Invalid char size");
 
 //// Source Location ///////////////////////////////////////////////////////////
+typedef struct Source_Location Source_Location;
+
 struct Source_Location {
     cstring filename;
     cstring caller_name;
     i32 line;
 };
 
-#define this_location() _this_location_0()
+#define this_location() this_location_()
 
-#define _this_location_0() (Source_Location){ \
+#define this_location_() (Source_Location){ \
     .filename = __FILE__, \
     .caller_name = __func__, \
     .line = __LINE__, \
@@ -139,8 +140,8 @@ void panic_assert_ex(bool pred, cstring msg, Source_Location loc);
 //// Slices ////////////////////////////////////////////////////////////////////
 template<typename T>
 struct Slice {
-	T* _data {nullptr};
-	isize _length {0};
+	T* _data;
+	isize _length;
 
 	isize size() const { return _length; }
 
@@ -170,8 +171,8 @@ struct Slice {
 	// Get a sub-slice in the interval a..b (end exclusive)
 	Slice<T> sub(isize from, isize to){
 		bounds_check_assert(from <= to, "Improper slicing range");
-		bounds_check_assert((from >= 0 && from < _length), "Slice index `from` is out of bounds");
-		bounds_check_assert(to >= 0 && to <= _length, "Slice index `to` is out of bounds");
+		bounds_check_assert(from >= 0 && from < _length, "Index to sub-slice is out of bounds");
+		bounds_check_assert(to >= 0 && to <= _length, "Index to sub-slice is out of bounds");
 
 		Slice<T> s;
 		s._length = to - from;
@@ -189,61 +190,6 @@ struct Slice {
 	}
 };
 
-//// Atomic ////////////////////////////////////////////////////////////////////
-// Boilerplate around C++'s standard library atomics, can't do much about that without leaking the entire std namespace
-template<typename T>
-using Atomic = std::atomic<T>;
-
-using std::memory_order_relaxed,
-    std::memory_order_consume,
-    std::memory_order_acquire,
-    std::memory_order_release,
-    std::memory_order_acq_rel,
-    std::memory_order_seq_cst;
-
-using
-	std::atomic_store,
-	std::atomic_store_explicit,
-	std::atomic_load,
-	std::atomic_load_explicit,
-	std::atomic_exchange,
-	std::atomic_exchange_explicit,
-	std::atomic_compare_exchange_weak,
-	std::atomic_compare_exchange_weak_explicit,
-	std::atomic_compare_exchange_strong,
-	std::atomic_compare_exchange_strong_explicit,
-	std::atomic_fetch_add,
-	std::atomic_fetch_add_explicit,
-	std::atomic_fetch_sub,
-	std::atomic_fetch_sub_explicit,
-	std::atomic_fetch_and,
-	std::atomic_fetch_and_explicit,
-	std::atomic_fetch_or,
-	std::atomic_fetch_or_explicit,
-	std::atomic_fetch_xor,
-	std::atomic_fetch_xor_explicit;
-
-//// Sync //////////////////////////////////////////////////////////////////////
-namespace sync {
-constexpr i32 SPINLOCK_UNLOCKED = 0;
-constexpr i32 SPINLOCK_LOCKED = 1;
-
-// The zeroed state of a spinlock is unlocked, to be effective across threads
-// it's important to keep the spinlock outside of the stack and never mark it as
-// a thread_local struct.
-struct Spinlock {
-	Atomic<i32> _state{SPINLOCK_UNLOCKED};
-
-	// Enter a busy wait loop until spinlock is acquired(locked)
-	void acquire();
-
-	// Try to lock spinlock, if failed, just move on. Returns if lock was locked.
-	bool try_acquire();
-
-	// Release(unlock) the spinlock
-	void release();
-};
-}
 //// Memory ////////////////////////////////////////////////////////////////////
 namespace mem {
 enum class Allocator_Op : byte {
@@ -252,6 +198,7 @@ enum class Allocator_Op : byte {
 	Resize   = 2, // Resize an allocation in-place
 	Free     = 3, // Mark allocation as free
 	Free_All = 4, // Mark allocations as free
+	Realloc  = 5, // Re-allocate pointer
 };
 
 enum class Allocator_Capability : u32 {
@@ -267,8 +214,7 @@ using Allocator_Func = void* (*) (
 	void* impl,
 	Allocator_Op op,
 	void* old_ptr,
-	isize size,
-    isize align,
+	isize size, isize align,
 	u32* capabilities
 );
 
@@ -278,28 +224,45 @@ struct Allocator {
 	Allocator_Func _func{0};
 
 	// Get capabilities of allocator as a number, gets capability bit-set
-	u32 query_capabilites();
+	u32 query_capabilites(){
+		u32 n = 0;
+		_func(_impl, Allocator_Op::Query, nullptr, 0, 0, &n);
+		return n;
+	}
 
 	// Allocate fresh memory, filled with 0s. Returns NULL on failure.
-	void* alloc(isize size, isize align);
+	void* alloc(isize size, isize align){
+		return _func(_impl, Allocator_Op::Alloc, nullptr, size, align, nullptr);
+	}
 
 	// Re-allocate memory in-place without changing the original pointer. Returns
 	// NULL on failure.
-	void* resize(void* ptr, isize new_size);
+	void* resize(void* ptr, isize new_size){
+		return _func(_impl, Allocator_Op::Resize, ptr, new_size, 0, nullptr);
+	}
 
 	// Free pointer to memory, includes alignment information, which is required for
 	// some allocators, freeing NULL is a no-op
-	void free_ex(void* p, isize size, isize align);
+	void free_ex(void* ptr, isize size, isize align){
+		_func(_impl, Allocator_Op::Free, ptr, size, align, nullptr);
+	}
 
 	// Free pointer to memory, freeing NULL is a no-op
-	void free(void* p);
+	void free(void* ptr){
+		_func(_impl, Allocator_Op::Free, ptr, 0, 0, nullptr);
+	}
 
 	// Free all pointers owned by allocator
-	void free_all();
+	void free_all(){
+		_func(_impl, Allocator_Op::Free_All, nullptr, 0, 0, nullptr);
+	}
 
-	// Re-allocate to new_size, first tries to resize in-place, then uses
-	// alloc->copy->free to attempt reallocation, returns null on failure
-	void* realloc(void* ptr, isize old_size, isize new_size, isize align);
+	// Re-allocate, unlike resize(), the pointer may change, returns null on
+	// failure, if allocation is moved somewhere else, the previous pointer
+	// is freed.
+	void* realloc(void* ptr, isize new_size, isize align){
+		return _func(_impl, Allocator_Op::Realloc, ptr, new_size, align, nullptr);
+	}
 };
 
 // Set n bytes of p to value.
@@ -313,7 +276,7 @@ void copy(void* dest, void const * src, isize nbytes);
 i32 compare(void const * a, void const * b, isize nbytes);
 
 // Copy n bytes for source to destination, they should not overlap, this tends
-// to be faster then mem_copy
+// to be faster then copy
 void copy_no_overlap(void* dest, void const * src, isize nbytes);
 
 // Align p to alignment a, this only works if a is a non-zero power of 2
@@ -321,52 +284,11 @@ uintptr align_forward_ptr(uintptr p, uintptr a);
 
 // Align p to alignment a, this works for any positive non-zero alignment
 uintptr align_forward_size(isize p, isize a);
-
 } /* Namespace mem */
-
-//// Make & Destroy ////////////////////////////////////////////////////////////
-// Allocate one of object of a type using allocator
-template<typename T>
-T* make(mem::Allocator al){
-	T* p = al.alloc(sizeof(T), alignof(T));
-	if(p != nullptr){
-		new (&p) T();
-	}
-	return p;
-}
-
-// Allocate slice of a type using allocator
-template<typename T>
-Slice<T> make(isize count, mem::Allocator al){
-	T* p = al.alloc(sizeof(T) * count, alignof(T) * count);
-	if(p != nullptr){
-		for(isize i = 0; i < count; i ++){
-			new (&p[i]) T();
-		}
-	}
-	return Slice<T>::from_pointer(p, count);
-}
-
-// Deallocate object from allocator
-template<typename T>
-void destroy(T* ptr, mem::Allocator al){
-	ptr->~T();
-	al.free(ptr);
-}
-
-// Deallocate slice from allocator
-template<typename T>
-void destroy(Slice<T> s, mem::Allocator al){
-	isize n = s.size();
-	T* ptr = s.raw_data();
-	for(isize i = 0; i < n; i ++){
-		ptr[i]->~T();
-	}
-	al.free(ptr);
-}
 
 //// UTF-8 /////////////////////////////////////////////////////////////////////
 namespace utf8 {
+
 // UTF-8 encoding result, a len = 0 means an error.
 struct Encode_Result {
 	byte bytes[4];
@@ -382,10 +304,10 @@ struct Decode_Result {
 // The error rune
 constexpr rune ERROR = 0xfffd;
 
-// The error rune but encoded
+// The error rune, byte encoded
 constexpr Encode_Result ERROR_ENCODED = {
 	.bytes = {0xef, 0xbf, 0xbd},
-	.len = 1, // Mainly for convenience when advancing over a series of invalid bytes.
+	.len = 0,
 };
 
 // Encode a unicode codepoint
@@ -407,44 +329,37 @@ struct Iterator {
 	// returns false when finished.
 	bool prev(rune* r, i8* len);
 
-    // Steps iterator forward and returns the read rune. Returns 0 when finished
+	// Steps iterator forward and returns rune, returns 0 on end.
 	rune next();
 
-    // Steps iterator backward and returns the read rune. Returns 0 when finished
+	// Steps iterator backward and returns rune, returns 0 when finished.
 	rune prev();
 };
-
-}/* Namespace utf8 */
+} /* Namespace utf8 */
 
 //// Strings ///////////////////////////////////////////////////////////////////
+static inline
+isize cstring_len(cstring cstr){
+	constexpr isize CSTR_MAX_LENGTH = (~(u32)0) >> 1;
+	isize size = 0;
+	for(isize i = 0; i < CSTR_MAX_LENGTH && cstr[i] != 0; i += 1){
+		size += 1;
+	}
+	return size;
+}
+
 struct String {
-	byte const * _data{nullptr};
-	isize _length{0};
+	byte const * _data = nullptr;
+	isize _length = 0;
 
 	// Size (in bytes)
-	isize size() const;
+	isize size() const { return _length; }
 
 	// Size (in codepoints)
 	isize rune_count();
 
 	// Create a substring
-	String sub(isize from, isize to);
-	
-    // Create a substring
-	String sub(isize from);
-
-    // Gets the string data as a slice of bytes, this is not necessarily safe to modify as the string data
-    // may live in the static section.
-    Slice<byte> to_bytes_unsafe();
-
-	// Create string from C-style string
-	static String from_cstr(cstring data);
-
-	// Create string from a piece of a C-style string
-	static String from_cstr(cstring data, isize start, isize length);
-
-	// Create string from a raw byte buffer
-	static String from_bytes(Slice<byte>);
+	String sub(isize start, isize length);
 
 	// Get an utf8 iterator from string
 	utf8::Iterator iterator();
@@ -452,18 +367,49 @@ struct String {
 	// Get an utf8 iterator from string, already at the end, to be used for reverse iteration
 	utf8::Iterator iterator_reversed();
 
+	// Trim leading and trailing runes from cutset
+	String trim(String cutset);
+	
+	// Trim leading runes from cutset
+	String trim_leading(String cutset);
+
+	// Trim trailing from cutset
+	String trim_trailing(String cutset);
+
+	// Create string from C-style string
+	static String from_cstr(cstring data){
+		String s;
+		s._data = (byte const*)data;
+		s._length = cstring_len(data);
+		return s;
+	}
+
+	// Create string from a piece of a C-style string
+	static String from_cstr(cstring data, isize start, isize length){
+		String s;
+		s._data = (byte const*)&data[start];
+		s._length = length;
+		return s;
+	}
+
+	// Create string from a raw byte buffer
+	static String from_bytes(Slice<byte> buf){
+		String s;
+		s._data = buf.raw_data();
+		s._length = buf.size();
+		return s;
+	}
+
+	// Implict conversion, this is one of the very vew places an implicit
+	// conversion is made in the library, mostly to write C-strings more
+	// ergonomic.
+	String(){}
+	String(cstring s) : _data((byte const*)s), _length(cstring_len(s)){}
+
 	// Check if 2 strings are equal
 	bool operator==(String lhs) const {
 		if(lhs._length != _length){ return false; }
 		return mem::compare(_data, lhs._data, _length) == 0;
 	}
-
-    // Implicit construction, this is one of the very vew places it's going to be used
-    // so we are able able to have String be initalized by a C string literal.
-    String(){}
-    String(cstring cstr);
 };
-
-// Length of cstring
-isize cstring_len(cstring cstr);
 

@@ -13,8 +13,9 @@ void print(T x, Args... rest){
     print(rest...);
 }
 
+#define test(pred) panic_assert_ex(pred, this_location());
+
 int main(){
     print(">", 293, true);
-    
     return 0;
 }

@@ -1,4 +1,5 @@
 #include "base.hpp"
+#include <stdio.h>
 
 //// Assert ////////////////////////////////////////////////////////////////////
 void debug_assert_ex(bool pred, cstring msg, Source_Location loc){
@@ -43,6 +44,7 @@ void unimplemented(){
 }
 
 //// Memory ////////////////////////////////////////////////////////////////////
+namespace mem {
 #if !defined(__clang__) && !defined(__GNUC__)
 #include <string.h>
 #define mem_set_impl             memset
@@ -56,7 +58,6 @@ void unimplemented(){
 #define mem_compare_impl         __builtin_memcmp
 #endif
 
-namespace mem {
 static inline
 bool valid_alignment(isize align){
 	return (align & (align - 1)) == 0 && (align != 0);
@@ -95,56 +96,7 @@ uintptr align_forward_size(isize p, isize a){
 	}
 	return p;
 }
-
-u32 Allocator::query_capabilites(){
-	u32 n = 0;
-	_func(_impl, Allocator_Op::Query, nullptr, 0, 0, &n);
-	return n;
-}
-
-void* Allocator::alloc(isize size, isize align){
-	return _func(_impl, Allocator_Op::Alloc, nullptr, size, align, nullptr);
-}
-
-void* Allocator::resize(void* ptr, isize new_size){
-	return _func(_impl, Allocator_Op::Resize, ptr, new_size, 0, nullptr);
-}
-
-void Allocator::free_ex(void* ptr, isize size, isize align){
-	_func(_impl, Allocator_Op::Free, ptr, size, align, nullptr);
-}
-
-void Allocator::free(void* ptr){
-	_func(_impl, Allocator_Op::Free, ptr, 0, 0, nullptr);
-}
-
-void Allocator::free_all(){
-	_func(_impl, Allocator_Op::Free_All, nullptr, 0, 0, nullptr);
-}
-
-void* Allocator::realloc(void* ptr, isize old_size, isize new_size, isize align){
-	if(ptr == nullptr){ return nullptr; }
-
-	void* resized_p = this->resize(ptr, new_size);
-	if(resized_p != nullptr){
-		return resized_p;
-	}
-
-	resized_p = this->alloc(new_size, align);
-	if(resized_p == nullptr){ // Out of memory
-		return nullptr;
-	}
-
-	copy(resized_p, ptr, old_size);
-	this->free(ptr);
-	return resized_p;
-}
 } /* Namespace mem */
-
-#undef mem_set_impl
-#undef mem_copy_impl
-#undef mem_copy_no_overlap_impl
-#undef mem_compare_impl
 
 //// UTF-8 /////////////////////////////////////////////////////////////////////
 namespace utf8 {
@@ -176,7 +128,7 @@ bool is_continuation_byte(rune c){
 }
 
 Encode_Result encode(rune c){
-	Encode_Result res {};
+	Encode_Result res = {};
 
 	if(is_continuation_byte(c) ||
 	   (c >= UTF16_SURROGATE1 && c <= UTF16_SURROGATE2) ||
@@ -213,7 +165,7 @@ Encode_Result encode(rune c){
 constexpr Decode_Result DECODE_ERROR = { .codepoint = ERROR, .len = 0 };
 
 Decode_Result decode(Slice<byte> s){
-	Decode_Result res {};
+	Decode_Result res = {};
 	byte* buf = s.raw_data();
 	isize len = s.size();
 
@@ -264,8 +216,6 @@ Decode_Result decode(Slice<byte> s){
 	return res;
 }
 
-// Steps iterator forward and puts rune and Length advanced into pointers,
-// returns false when finished.
 bool Iterator::next(rune* r, i8* len){
 	if(this->current >= this->data.size()){ return 0; }
 
@@ -274,12 +224,26 @@ bool Iterator::next(rune* r, i8* len){
 	*len = res.len;
 
 	if(res.codepoint == DECODE_ERROR.codepoint){
-		*len = res.len + 1;
+		*len = 1;
 	}
 
 	this->current += res.len;
 
 	return 1;
+}
+
+rune Iterator::next(){
+	i8 n = 0;
+	rune r;
+	if(!next(&r, &n)) return 0;
+	return r;
+}
+
+rune Iterator::prev(){
+	i8 n = 0;
+	rune r;
+	if(!prev(&r, &n)) return 0;
+	return r;
 }
 
 
@@ -298,88 +262,111 @@ bool Iterator::prev(rune* r, i8* len){
 	*len = res.len;
 	return true;
 }
-
-rune Iterator::next(){
-    rune r = 0; i8 n;
-    next(&r, &n);
-    return r;
-}
-
-rune Iterator::prev(){
-    rune r = 0; i8 n;
-    prev(&r, &n);
-    return r;
-}
-
 } /* Namespace utf8 */
 
 //// Strings ///////////////////////////////////////////////////////////////////
-isize cstring_len(cstring cstr){
-	constexpr isize CSTR_MAX_LENGTH = (~(u32)0) >> 1;
+isize String::rune_count(){
+	[[maybe_unused]] rune r;
+	[[maybe_unused]] i8 n;
+	auto it = iterator();
 	isize size = 0;
-	for(isize i = 0; i < CSTR_MAX_LENGTH && cstr[i] != 0; i += 1){
-		size += 1;
-	}
+	while(it.next(&r, &n)) { size += 1; }
 	return size;
 }
 
-isize String::size() const {
-	return _length;
+constexpr isize MAX_CUTSET_LEN = 128;
+
+String String::trim(String cutset){
+	String trimmed = this->trim_trailing(cutset).trim_trailing(cutset);
+	return trimmed;
 }
 
-utf8::Iterator String::iterator(){
-	return {
-		.data = this->to_bytes_unsafe(),
-		.current = 0,
-	};
+String String::trim_leading(String cutset){
+	debug_assert(cutset.size() <= MAX_CUTSET_LEN, "Cutset string exceeds MAX_CUTSET_LEN");
+
+	rune set[MAX_CUTSET_LEN] = {0};
+	isize set_len = 0;
+	isize cut_after = 0;
+
+	decode_cutset: {
+		rune c; i8 n;
+		auto iter = cutset.iterator();
+
+		isize i = 0;
+		while(iter.next(&c, &n) && i < MAX_CUTSET_LEN){
+			set[i] = c;
+			i += 1;
+		}
+		set_len = i;
+	}
+
+	strip_cutset: {
+		rune c; i8 n;
+		auto iter = this->iterator();
+
+		while(iter.next(&c, &n)){
+			bool to_be_cut = false;
+			for(isize i = 0; i < set_len; i += 1){
+				if(set[i] == c){
+					to_be_cut = true;
+					break;
+				}
+			}
+
+			if(to_be_cut){
+				cut_after += n;
+			}
+			else {
+				break; // Reached first rune that isn't in cutset
+			}
+
+		}
+	}
+
+	unimplemented();
 }
 
-utf8::Iterator String::iterator_reversed(){
-	return {
-		.data = this->to_bytes_unsafe(),
-		.current = _length,
-	};
-}
+String String::trim_trailing(String cutset){
+	debug_assert(cutset.size() <= MAX_CUTSET_LEN, "Cutset string exceeds MAX_CUTSET_LEN");
 
-utf8::Iterator str_iterator_reversed(String s);
+	rune set[MAX_CUTSET_LEN] = {0};
+	isize set_len = 0;
+	isize cut_until = _length;
 
-isize String::rune_count() {
-    auto it = iterator();
-    isize count = 0;
-    
-    while(it.next() != 0){
-        count += 1;
-    }
-    return count;
-}
+	decode_cutset: {
+		rune c; i8 n;
+		auto iter = cutset.iterator();
 
-String String::sub(isize from, isize to){}
+		isize i = 0;
+		while(iter.next(&c, &n) && i < MAX_CUTSET_LEN){
+			set[i] = c;
+			i += 1;
+		}
+		set_len = i;
+	}
 
-String String::sub(isize from){}
+	strip_cutset: {
+		rune c; i8 n;
+		auto iter = this->iterator_reversed();
 
-String String::from_cstr(cstring data){
-    String s;
-    s._data = (byte const*)data;
-    s._length = cstring_len(data);
-    return s;
-}
+		while(iter.prev(&c, &n)){
+			bool to_be_cut = false;
+			for(isize i = 0; i < set_len; i += 1){
+				if(set[i] == c){
+					to_be_cut = true;
+					break;
+				}
+			}
 
-String String::from_cstr(cstring data, isize start, isize length){
-    String s;
-    s._data = (byte const*)data + start;
-    s._length = length;
-    return s;
-}
+			if(to_be_cut){
+				cut_until -= n;
+			}
+			else {
+				break; // Reached first rune that isn't in cutset
+			}
 
-String String::from_bytes(Slice<byte> b){
-    String s;
-    s._data = b.raw_data();
-    s._length = s.size();
-    return s;
-}
+		}
+	}
 
-String::String(cstring cstr){
-    _data = (byte const*) cstr;
-    _length = cstring_len(cstr);
-
+	unimplemented();
 }
