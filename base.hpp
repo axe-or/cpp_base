@@ -358,7 +358,7 @@ struct String {
 	// Size (in codepoints)
 	isize rune_count();
 
-	// Create a substring
+	// Get a sub-string in the byte interval a..b (end exclusive)
 	String sub(isize start, isize length);
 
 	// Get an utf8 iterator from string
@@ -405,6 +405,12 @@ struct String {
 	// ergonomic.
 	String(){}
 	String(cstring s) : _data((byte const*)s), _length(cstring_len(s)){}
+
+	// Get byte at position
+	byte operator[](isize idx) const {
+		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on string");
+		return _data[idx];
+	}
 
 	// Check if 2 strings are equal
 	bool operator==(String lhs) const {

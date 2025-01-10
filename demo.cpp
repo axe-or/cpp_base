@@ -13,9 +13,33 @@ void print(T x, Args... rest){
     print(rest...);
 }
 
-#define test(pred) panic_assert_ex(pred, this_location());
+std::ostream& operator<<(std::ostream& os, String s){
+	for(isize i = 0; i < s.size(); i ++){
+		os << s[i];
+	}
+	return os;
+}
+
+struct rune_wrapper {
+	rune r;
+	explicit rune_wrapper(rune r) : r(r){}
+};
+
+std::ostream& operator<<(std::ostream& os, rune_wrapper r){
+	auto res = utf8::encode(r.r);
+	char buf[5] = {0};
+	mem::copy(buf, res.bytes, res.len);
+	os << buf;
+	return os;
+}
 
 int main(){
-    print(">", 293, true);
+	String s = "Hello, 世界";
+    print(s);
+
+	auto it = s.iterator();
+	for(rune r = it.next(); r != 0; r = it.next()){
+		print(rune_wrapper(r));
+	}
     return 0;
 }

@@ -6,6 +6,7 @@ void debug_assert_ex(bool pred, cstring msg, Source_Location loc){
 	#if defined(NDEBUG) || defined(RELEASE_MODE)
 		(void)pred; (void)msg;
 	#else
+	[[unlikely]]
 	if(!pred){
 		fprintf(stderr, "(%s:%d) Failed assert: %s\n", loc.filename, loc.line, msg);
 		abort();
@@ -14,6 +15,7 @@ void debug_assert_ex(bool pred, cstring msg, Source_Location loc){
 }
 
 void panic_assert_ex(bool pred, cstring msg, Source_Location loc){
+	[[unlikely]]
 	if(!pred){
 		fprintf(stderr, "[%s:%d %s()] Failed assert: %s\n", loc.filename, loc.line, loc.caller_name, msg);
 		abort();
@@ -24,6 +26,7 @@ void bounds_check_assert_ex(bool pred, cstring msg, Source_Location loc){
 	#if defined(DISABLE_BOUNDS_CHECK)
 		(void)pred; (void)msg;
 	#else
+	[[unlikely]]
 	if(!pred){
 		fprintf(stderr, "(%s:%d) Failed bounds check: %s\n", loc.filename, loc.line, msg);
 		abort();
@@ -274,11 +277,35 @@ isize String::rune_count(){
 	return size;
 }
 
+String String::sub(isize from, isize to){
+	bounds_check_assert(from <= to, "Improper slicing range");
+	bounds_check_assert(from >= 0 && from < _length, "Index to sub-string is out of bounds");
+	bounds_check_assert(to >= 0 && to <= _length, "Index to sub-string is out of bounds");
+	String s;
+	s._length = to - from;
+	s._data = &_data[from];
+	return s;
+}
+
 constexpr isize MAX_CUTSET_LEN = 128;
 
 String String::trim(String cutset){
 	String trimmed = this->trim_trailing(cutset).trim_trailing(cutset);
 	return trimmed;
+}
+
+utf8::Iterator String::iterator(){
+	return {
+		.data = Slice<byte>::from_pointer((byte*)_data, _length),
+		.current = 0,
+	};
+}
+
+utf8::Iterator String::iterator_reversed(){
+	return {
+		.data = Slice<byte>::from_pointer((byte*)_data, _length),
+		.current = _length,
+	};
 }
 
 String String::trim_leading(String cutset){
