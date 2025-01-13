@@ -531,7 +531,7 @@ static void* _heap_allocator_func (
 
 		case M::Free: {
 			auto p = (byte*)old_ptr;
-			operator delete(p, std::align_val_t(align));
+			::operator delete[](p, std::align_val_t(align));
 		} break;
 
 		case M::Query: {

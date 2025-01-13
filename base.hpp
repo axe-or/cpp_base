@@ -222,41 +222,6 @@ struct Slice {
 	}
 };
 
-//// Fixed Array ///////////////////////////////////////////////////////////////
-// Basically the same interface as a dynamic array, but with a fixed backing buffer
-template<typename T, isize N>
-struct Fixed_Array {
-	T _data[N];
-	isize _length = 0;
-
-	isize size() const { return _length; }
-
-	isize cap() const { return N; }
-
-	T& operator[](isize idx){
-		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on fixed array");
-		return _data[idx];
-	}
-
-	T const & operator[](isize idx) const {
-		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on fixed array");
-		return _data[idx];
-	}
-
-	bool append(T val){
-		if(_length >= N){
-			return false;
-		}
-		_data[_length] = val;
-		_length += 1;
-		return true;
-	}
-
-	Slice<T> slice(){
-		return Slice<T>::from_pointer(&_data[0], N);
-	}
-};
-
 //// Memory ////////////////////////////////////////////////////////////////////
 namespace mem {
 enum class Allocator_Op : byte {
@@ -551,5 +516,9 @@ struct Arena {
 namespace mem {
 // Just a wrapper around aligned_alloc and free
 Allocator heap_allocator();
+
 } /* Namespace mem */
+
+//// Dynamic Array /////////////////////////////////////////////////////////////
+
 
