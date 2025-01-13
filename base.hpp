@@ -325,12 +325,46 @@ struct Allocator {
 		_func(_impl, Allocator_Op::Free_All, nullptr, 0, 0, nullptr);
 	}
 
-	// Re-allocate, unlike resize(), the pointer may change, returns null on
-	// failure, if allocation is moved somewhere else, the previous pointer
-	// is freed.
-	// void* realloc(void* ptr, isize new_size, isize align){
-	// 	return _func(_impl, Allocator_Op::Realloc, ptr, new_size, align, nullptr);
-	// }
+	// Helper to create any type
+	template<typename T>
+	T* make(){
+		auto p = (T*)this->alloc(sizeof(T), alignof(T));
+		if(p != nullptr){
+			new (p) T();
+		}
+		return p;
+	}
+
+	// Helper to create any type
+	template<typename T>
+	Slice<T> make(isize n){
+		auto p = (T*)this->alloc(n * sizeof(T), alignof(T));
+		if(p != nullptr){
+			for(isize i = 0; i < n; i++){
+				new (&p[i]) T();
+			}
+		}
+		return Slice<T>::from_pointer(p, n);
+	}
+
+	// Helper to destroy any type
+	template<typename T>
+	void destroy(T* p){
+		p->~T();
+		this->free_ex((void*)p, sizeof(T), alignof(T));
+	}
+
+	// Helper to destroy any type
+	template<typename T>
+	void destroy(Slice<T> s){
+		T* buf = s.raw_data();
+		isize n = s.size();
+		for(isize i = 0; i < n; i++){
+			(buf + i)->~T();
+		}
+		this->free_ex((void*)buf, n * sizeof(T), alignof(T));
+	}
+
 };
 
 // Set n bytes of p to value.

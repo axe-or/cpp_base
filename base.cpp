@@ -515,12 +515,12 @@ static void* _heap_allocator_func (
 	isize align,
 	u32* capabilities
 ){
+	ensure(valid_alignment(align), "Invalid alignment");
 	using M = Allocator_Op;
 	using C = Allocator_Capability;
 
 	switch(op){
 		case M::Alloc: {
-			ensure(valid_alignment(align), "Invalid alignment");
 			auto ptr = new(std::align_val_t(align)) byte[size];
 			return (void*)ptr;
 		} break;
@@ -531,7 +531,7 @@ static void* _heap_allocator_func (
 
 		case M::Free: {
 			auto p = (byte*)old_ptr;
-			delete [] p;
+			operator delete(p, std::align_val_t(align));
 		} break;
 
 		case M::Query: {

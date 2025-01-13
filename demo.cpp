@@ -60,6 +60,7 @@ int main(){
 		print(Codepoint(r));
 	}
 
-	expect(2 + 2 == 5);
+	test_slice();
+
     return 0;
 }
