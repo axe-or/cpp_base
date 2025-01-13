@@ -52,6 +52,7 @@ std::ostream& operator<<(std::ostream& os, Slice<T> s){
 
 int main(){
 	String s = "Hello, 世界";
+	defer(print("Hello"));
     print(s);
 
 	auto it = s.iterator();

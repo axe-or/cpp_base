@@ -93,6 +93,27 @@ static_assert(sizeof(void(*)(void)) == sizeof(void*), "Function pointers and dat
 static_assert(sizeof(void(*)(void)) == sizeof(uintptr), "Mismatched pointer types");
 static_assert(CHAR_BIT == 8, "Invalid char size");
 
+//// Defer /////////////////////////////////////////////////////////////////////
+namespace impl_defer {
+	template<typename F>
+	struct Deferred {
+		F f;
+		explicit Deferred(F&& f) : f(static_cast<F&&>(f)){}
+		~Deferred(){ f(); }
+	};
+
+	template<typename F>
+	auto make_deferred(F&& f){
+		return Deferred<F>(static_cast<F&&>(f));
+	}
+}
+
+#define _defer_impl_glue0(X, Y) X##Y
+#define _defer_impl_glue1(X, Y) _defer_impl_glue0(X, Y)
+#define _defer_impl_glue_num(X) _defer_impl_glue1(X, __COUNTER__)
+
+#define defer(Stmt) auto _defer_impl_glue_num(_defer_fn_) = ::impl_defer::make_deferred([&](){ Stmt ; });
+
 //// Source Location ///////////////////////////////////////////////////////////
 typedef struct Source_Location Source_Location;
 
@@ -163,7 +184,7 @@ struct Slice {
 	}
 
 	// Get a sub-slice in the interval a..slice.size()
-	Slice<T> sub(isize from){
+	Slice<T> slice(isize from){
 		bounds_check_assert(from >= 0 && from < _length, "Index to sub-slice is out of bounds");
 		Slice<T> s;
 		s._length = _length - from;
@@ -172,7 +193,7 @@ struct Slice {
 	}
 
 	// Get a sub-slice in the interval a..b (end exclusive)
-	Slice<T> sub(isize from, isize to){
+	Slice<T> slice(isize from, isize to){
 		bounds_check_assert(from <= to, "Improper slicing range");
 		bounds_check_assert(from >= 0 && from < _length, "Index to sub-slice is out of bounds");
 		bounds_check_assert(to >= 0 && to <= _length, "Index to sub-slice is out of bounds");
@@ -220,6 +241,19 @@ struct Fixed_Array {
 	T const & operator[](isize idx) const {
 		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on fixed array");
 		return _data[idx];
+	}
+
+	bool append(T val){
+		if(_length >= N){
+			return false;
+		}
+		_data[_length] = val;
+		_length += 1;
+		return true;
+	}
+
+	Slice<T> slice(){
+		return Slice<T>::from_pointer(&_data[0], N);
 	}
 };
 
