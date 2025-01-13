@@ -1,3 +1,5 @@
+#include "base.hpp"
+
 namespace test {
 static Atomic<i32> total = 0;
 static Atomic<i32> failed = 0;
@@ -16,7 +18,8 @@ void test_slice(){
 	auto allocator = mem::heap_allocator();
 	auto s0 = allocator.make<int>(16);
 	auto s1 = allocator.make<int>(16);
-	// defer(allocator.destroy(s1));
+	defer(allocator.destroy(s0));
+	defer(allocator.destroy(s1));
 
 	for(isize i = 0; i < s0.size(); i++){
 		s0[i] = i;
@@ -33,6 +36,5 @@ void test_slice(){
 	print(s0.slice(0, 5));
 	print(s1.slice(6));
 
-	allocator.destroy(s0);
 }
 

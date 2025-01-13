@@ -101,7 +101,6 @@ namespace impl_defer {
 		explicit Deferred(F&& f) : f(static_cast<F&&>(f)){}
 		~Deferred(){ f(); }
 	};
-
 	template<typename F>
 	auto make_deferred(F&& f){
 		return Deferred<F>(static_cast<F&&>(f));
@@ -111,8 +110,7 @@ namespace impl_defer {
 #define _defer_impl_glue0(X, Y) X##Y
 #define _defer_impl_glue1(X, Y) _defer_impl_glue0(X, Y)
 #define _defer_impl_glue_num(X) _defer_impl_glue1(X, __COUNTER__)
-
-#define defer(Stmt) auto _defer_impl_glue_num(_defer_fn_) = ::impl_defer::make_deferred([&](){ Stmt ; });
+#define defer(Stmt) [[maybe_unused]] auto _defer_impl_glue_num(_defer_fn_) = ::impl_defer::make_deferred([&](){ Stmt ; });
 
 //// Source Location ///////////////////////////////////////////////////////////
 typedef struct Source_Location Source_Location;
