@@ -39,6 +39,9 @@ using f64 = double;
 
 using cstring = char const *;
 
+template<typename T>
+using Atomic = std::atomic<T>;
+
 // Swap bytes around, useful for when dealing with endianess
 template<typename T>
 void swap_bytes(T* data){
@@ -126,9 +129,9 @@ void bounds_check_assert_ex(bool pred, cstring msg, Source_Location loc);
 #endif
 
 // Crash if `pred` is false, this is always enabled
-void panic_assert_ex(bool pred, cstring msg, Source_Location loc);
+void ensure_ex(bool pred, cstring msg, Source_Location loc);
 
-#define panic_assert(Pred, Msg) panic_assert_ex(Pred, Msg, this_location())
+#define ensure(Pred, Msg) ensure_ex(Pred, Msg, this_location())
 
 // Crash the program with a fatal error
 [[noreturn]] void panic(cstring msg);
@@ -182,11 +185,41 @@ struct Slice {
 
 	Slice() : _data{nullptr}, _length{0} {}
 
+	bool equals(Slice<T> s) {
+		if(_length != s._length){ return false; }
+		for(isize i = 0; i < s.size(); i ++){
+			if(s._data[i] != _data[i]){ return false; }
+		}
+		return true;
+	}
+
 	static Slice<T> from_pointer(T* ptr, isize len){
 		Slice<T> s;
 		s._data = ptr;
 		s._length = len;
 		return s;
+	}
+};
+
+//// Fixed Array ///////////////////////////////////////////////////////////////
+// Basically the same interface as a dynamic array, but with a fixed backing buffer
+template<typename T, isize N>
+struct Fixed_Array {
+	T _data[N];
+	isize _length = 0;
+
+	isize size() const { return _length; }
+
+	isize cap() const { return N; }
+
+	T& operator[](isize idx){
+		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on fixed array");
+		return _data[idx];
+	}
+
+	T const & operator[](isize idx) const {
+		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on fixed array");
+		return _data[idx];
 	}
 };
 
@@ -360,7 +393,7 @@ struct String {
 	isize rune_count();
 
 	// Get a sub-string in the byte interval a..b (end exclusive)
-	String sub(isize start, isize length);
+	String sub(isize from, isize to);
 
 	// Get an utf8 iterator from string
 	utf8::Iterator iterator();

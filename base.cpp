@@ -14,7 +14,7 @@ void debug_assert_ex(bool pred, cstring msg, Source_Location loc){
 	#endif
 }
 
-void panic_assert_ex(bool pred, cstring msg, Source_Location loc){
+void ensure_ex(bool pred, cstring msg, Source_Location loc){
 	[[unlikely]]
 	if(!pred){
 		fprintf(stderr, "[%s:%d %s()] Failed assert: %s\n", loc.filename, loc.line, loc.caller_name, msg);
@@ -84,7 +84,7 @@ i32 compare(void const * a, void const * b, isize nbytes){
 
 uintptr align_forward_ptr(uintptr p, uintptr a){
 	debug_assert(valid_alignment(a), "Invalid memory alignment");
-	uintptr mod = p & (a - 1);
+	uintptr mod = p & (a - 1); // Fast modulo for powers of 2
 	if(mod > 0){
 		p += (a - mod);
 	}
@@ -92,8 +92,8 @@ uintptr align_forward_ptr(uintptr p, uintptr a){
 }
 
 uintptr align_forward_size(isize p, isize a){
-	debug_assert(a > 0, "Invalid size alignment");
-	isize mod = p % a;
+	debug_assert(valid_alignment(a), "Invalid size alignment");
+	isize mod = p & (a - 1); // Fast modulo for powers of 2
 	if(mod > 0){
 		p += (a - mod);
 	}
@@ -498,6 +498,56 @@ void arena_init(Arena* a, byte* data, isize len){
 	a->capacity = len;
 	a->data = data;
 	a->offset = 0;
+}
+
+
+} /* Namespace mem */
+
+
+//// Heap Allocator ////////////////////////////////////////////////////////////
+namespace mem {
+
+static void* _heap_allocator_func (
+	[[maybe_unused]] void* impl,
+	Allocator_Op op,
+	void* old_ptr,
+	isize size,
+	isize align,
+	u32* capabilities
+){
+	using M = Allocator_Op;
+	using C = Allocator_Capability;
+
+	switch(op){
+		case M::Alloc: {
+			ensure(valid_alignment(align), "Invalid alignment");
+			auto ptr = new(std::align_val_t(align)) byte[size];
+			return (void*)ptr;
+		} break;
+
+		case M::Free_All: break;
+
+		case M::Resize: break;
+
+		case M::Free: {
+			auto p = (byte*)old_ptr;
+			delete [] p;
+		} break;
+
+		case M::Query: {
+			*capabilities = u32(C::Align_Any) | u32(C::Free_Any) | u32(C::Alloc_Any);
+		} break;
+	}
+
+	return nullptr;
+}
+
+Allocator heap_allocator(){
+	Allocator a = {
+		._impl = nullptr,
+		._func = _heap_allocator_func,
+	};
+	return a;
 }
 
 } /* Namespace mem */

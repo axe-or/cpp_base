@@ -48,6 +48,8 @@ std::ostream& operator<<(std::ostream& os, Slice<T> s){
 	return os;
 }
 
+#include "tests.cpp"
+
 int main(){
 	String s = "Hello, 世界";
     print(s);
@@ -56,5 +58,7 @@ int main(){
 	for(rune r = it.next(); r != 0; r = it.next()){
 		print(Codepoint(r));
 	}
+
+	expect(2 + 2 == 5);
     return 0;
 }
