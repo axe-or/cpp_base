@@ -222,7 +222,7 @@ Decode_Result decode(Slice<byte> s){
 bool Iterator::next(rune* r, i8* len){
 	if(this->current >= this->data.size()){ return 0; }
 
-	Decode_Result res = decode(this->data.slice(current));
+	Decode_Result res = decode(this->data.slice_right(current));
 	*r = res.codepoint;
 	*len = res.len;
 
@@ -260,7 +260,7 @@ bool Iterator::prev(rune* r, i8* len){
 		this->current -= 1;
 	}
 
-	Decode_Result res = decode(this->data.slice(current));
+	Decode_Result res = decode(this->data.slice_right(current));
 	*r = res.codepoint;
 	*len = res.len;
 	return true;

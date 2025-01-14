@@ -31,7 +31,14 @@ void test_slice(){
 	expect(!s0.equals(s1));
 
 	expect(s0.slice(0, 5).equals(s1.slice(0, 5)));
-	expect(s0.slice(6, s0.size()).equals(s1.slice(6)));
+	expect(s0.slice(6, s0.size()).equals(s1.slice_right(6)));
+
+	expect(s0.slice(0, 6).equals(s0.slice_left(6)));
+	expect(s0.slice_left(0).size() == 0);
+	expect(s0.slice_right(0).size() == s0.size());
+
+	expect(s0.slice(0, 6).equals(s0.slice_left(6)));
+	expect(s0.slice(6, s0.size()).equals(s0.slice_right(6)));
 }
 
 void test_string(){
@@ -72,3 +79,5 @@ void test_string(){
 	}
 }
 
+void test_dynamic_array(){
+}

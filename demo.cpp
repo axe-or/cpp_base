@@ -53,6 +53,7 @@ std::ostream& operator<<(std::ostream& os, Slice<T> s){
 int main(){
 	test_slice();
 	test_string();
-
+	test_dynamic_array();
     return 0;
 }
+

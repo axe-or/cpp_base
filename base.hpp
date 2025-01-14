@@ -189,16 +189,30 @@ struct Slice {
 		return -1;
 	}
 
-	// Get a sub-slice in the interval a..slice.size()
-	Slice<T> slice(isize from){
-		bounds_check_assert(from >= 0 && from < _length, "Index to sub-slice is out of bounds");
+	// Identity function, for consistency with other contigous array types
+	Slice<T> slice(){
+		return *this;
+	}
+
+	// Get the sub-slice of elements after index (inclusive)
+	Slice<T> slice_right(isize idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
 		Slice<T> s;
-		s._length = _length - from;
-		s._data = &_data[from];
+		s._length = _length - idx;
+		s._data = &_data[idx];
 		return s;
 	}
 
-	// Get a sub-slice in the interval a..b (end exclusive)
+	// Get the sub-slice of elements before index (exclusive)
+	Slice<T> slice_left(isize idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
+		Slice<T> s;
+		s._length = idx;
+		s._data = _data;
+		return s;
+	}
+
+	// Get the sub-slice of interval a..b (end exclusive)
 	Slice<T> slice(isize from, isize to){
 		bounds_check_assert(from <= to, "Improper slicing range");
 		bounds_check_assert(from >= 0 && from < _length, "Index to sub-slice is out of bounds");
@@ -321,7 +335,6 @@ struct Allocator {
 	// Helper to destroy any type
 	template<typename T>
 	void destroy(T* p){
-		p->~T();
 		this->free_ex((void*)p, sizeof(T), alignof(T));
 	}
 
@@ -330,9 +343,6 @@ struct Allocator {
 	void destroy(Slice<T> s){
 		T* buf = s.raw_data();
 		isize n = s.size();
-		for(isize i = 0; i < n; i++){
-			(buf + i)->~T();
-		}
 		this->free_ex((void*)buf, n * sizeof(T), alignof(T));
 	}
 
@@ -480,19 +490,19 @@ struct String {
 	String(cstring s) : _data((byte const*)s), _length(cstring_len(s)){}
 
 	// Get byte at position
-	byte operator[](isize idx) const {
+	byte operator[](isize idx) const noexcept {
 		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on string");
 		return _data[idx];
 	}
 
 	// Check if 2 strings are equal
-	bool operator==(String lhs) const {
+	bool operator==(String lhs) const noexcept {
 		if(lhs._length != _length){ return false; }
 		return mem::compare(_data, lhs._data, _length) == 0;
 	}
 
 	// Check if 2 strings are different
-	bool operator!=(String lhs) const {
+	bool operator!=(String lhs) const noexcept {
 		if(lhs._length != _length){ return false; }
 		return mem::compare(_data, lhs._data, _length) != 0;
 	}
@@ -532,5 +542,66 @@ Allocator heap_allocator();
 } /* Namespace mem */
 
 //// Dynamic Array /////////////////////////////////////////////////////////////
+static constexpr isize dynamic_array_default_capacity = 16;
+
+template<typename T>
+struct Dynamic_Array {
+	T* data = nullptr;
+	isize length = 0;
+	isize capacity = 0;
+	mem::Allocator allocator {0};
+
+	// Size of array (in elements)
+	isize size() const { return length; }
+
+	// Current capacity (in elements)
+	isize cap() const { return capacity; }
+
+	// Resize array's underlying buffer, returns if succeeded
+	bool resize(isize new_cap){
+		T* new_data = nullptr;
+
+		new_data = (T*)allocator.resize(data, new_cap * sizeof(T));
+
+		// Needs new allocation
+		if(new_data == nullptr){
+			new_data = (T*)allocator.alloc(data, new_cap * sizeof(T));
+			if(new_data == nullptr){ return false; }
+
+			mem::copy_no_overlap(new_data, data, sizeof(T) * min(new_cap, length));
+			allocator.free_ex(data, sizeof(T) * capacity, alignof(T));
+		}
+
+		capacity = new_cap;
+		length   = min(length, new_cap);
+		data     = new_data;
+		return true;
+	}
+
+	// Add element to end of array, returns if succeeded
+	bool append(T e){
+		if(length >= capacity){
+			isize new_cap = max(capacity, dynamic_array_default_capacity) * 2;
+			if(!this->resize(new_cap)){ return false; }
+		}
+
+		data[length] = e;
+		length += 1;
+		return true;
+	}
+
+	Slice<T> slice(isize from, isize to){}
+
+	T& operator[](isize idx) noexcept {
+		bounds_check_assert(idx >= 0 && idx < length, "Index to dyanamic array is out of bounds");
+		return data[idx];
+	}
+
+	T const& operator[](isize idx) const noexcept {
+		bounds_check_assert(idx >= 0 && idx < length, "Index to dyanamic array is out of bounds");
+		return data[idx];
+	}
+
+};
 
 
