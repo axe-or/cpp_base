@@ -150,7 +150,7 @@ void bounds_check_assert_ex(bool pred, cstring msg, Source_Location loc);
 // Crash if `pred` is false, this is always enabled
 void ensure_ex(bool pred, cstring msg, Source_Location loc);
 
-#define ensure(Pred, Msg) ensure_ex(Pred, Msg, this_location())
+#define ensure(Pred, Msg) ensure_ex((Pred), Msg, this_location())
 
 // Crash the program with a fatal error
 [[noreturn]] void panic(cstring msg);
@@ -296,13 +296,8 @@ struct Allocator {
 
 	// Free pointer to memory, includes alignment information, which is required for
 	// some allocators, freeing NULL is a no-op
-	void free_ex(void* ptr, isize size, isize align){
+	void free(void* ptr, isize size, isize align){
 		_func(_impl, Allocator_Op::Free, ptr, size, align, nullptr);
-	}
-
-	// Free pointer to memory, freeing NULL is a no-op
-	void free(void* ptr){
-		_func(_impl, Allocator_Op::Free, ptr, 0, 0, nullptr);
 	}
 
 	// Free all pointers owned by allocator
@@ -335,7 +330,7 @@ struct Allocator {
 	// Helper to destroy any type
 	template<typename T>
 	void destroy(T* p){
-		this->free_ex((void*)p, sizeof(T), alignof(T));
+		this->free((void*)p, sizeof(T), alignof(T));
 	}
 
 	// Helper to destroy any type
@@ -343,7 +338,7 @@ struct Allocator {
 	void destroy(Slice<T> s){
 		T* buf = s.raw_data();
 		isize n = s.size();
-		this->free_ex((void*)buf, n * sizeof(T), alignof(T));
+		this->free((void*)buf, n * sizeof(T), alignof(T));
 	}
 
 };
@@ -565,11 +560,11 @@ struct Dynamic_Array {
 
 		// Needs new allocation
 		if(new_data == nullptr){
-			new_data = (T*)allocator.alloc(data, new_cap * sizeof(T));
+			new_data = (T*)allocator.alloc(new_cap * sizeof(T), alignof(T));
 			if(new_data == nullptr){ return false; }
 
 			mem::copy_no_overlap(new_data, data, sizeof(T) * min(new_cap, length));
-			allocator.free_ex(data, sizeof(T) * capacity, alignof(T));
+			allocator.free(data, sizeof(T) * capacity, alignof(T));
 		}
 
 		capacity = new_cap;
@@ -602,6 +597,11 @@ struct Dynamic_Array {
 		return data[idx];
 	}
 
+	static Dynamic_Array<T> from(mem::Allocator allocator){
+		Dynamic_Array<T> arr;
+		arr.allocator = allocator;
+		return arr;
+	}
 };
 
 

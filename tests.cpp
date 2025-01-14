@@ -80,4 +80,9 @@ void test_string(){
 }
 
 void test_dynamic_array(){
+	auto arr = Dynamic_Array<i32>::from(mem::heap_allocator());
+	print(arr);
+	arr.append(0);
+	print(arr);
 }
+

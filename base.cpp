@@ -15,8 +15,7 @@ void debug_assert_ex(bool pred, cstring msg, Source_Location loc){
 }
 
 void ensure_ex(bool pred, cstring msg, Source_Location loc){
-	[[unlikely]]
-	if(!pred){
+	[[unlikely]] if(!pred){
 		fprintf(stderr, "[%s:%d %s()] Failed assert: %s\n", loc.filename, loc.line, loc.caller_name, msg);
 		abort();
 	}
@@ -35,7 +34,7 @@ void bounds_check_assert_ex(bool pred, cstring msg, Source_Location loc){
 }
 
 [[noreturn]]
-void panic(char* const msg){
+void panic(cstring msg){
 	fprintf(stderr, "Panic: %s\n", msg);
 	abort();
 }
@@ -515,12 +514,13 @@ static void* _heap_allocator_func (
 	isize align,
 	u32* capabilities
 ){
-	ensure(valid_alignment(align), "Invalid alignment");
+
 	using M = Allocator_Op;
 	using C = Allocator_Capability;
 
 	switch(op){
 		case M::Alloc: {
+		    ensure(valid_alignment(align), "Invalid alignment");
 			auto ptr = new(std::align_val_t(align)) byte[size];
 			return (void*)ptr;
 		} break;

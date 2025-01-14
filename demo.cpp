@@ -48,6 +48,21 @@ std::ostream& operator<<(std::ostream& os, Slice<T> s){
 	return os;
 }
 
+template<typename T>
+std::ostream& operator<<(std::ostream& os, Dynamic_Array<T> s){
+	if(s.size() == 0){
+		os << "(size:0 cap:" << s.cap() << ")[]";
+		return os;
+	}
+
+	os << "(size:" << s.size() << " cap:" << s.cap() << ")[";
+	for(isize i = 0; i < (s.size() - 1); i ++){
+		os << s[i] << ' ';
+	}
+	os << s[s.size() - 1] << ']';
+	return os;
+}
+
 #include "tests.cpp"
 
 int main(){
