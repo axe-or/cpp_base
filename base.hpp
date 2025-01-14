@@ -181,6 +181,14 @@ struct Slice {
 		return _data[idx];
 	}
 
+	// Find first occurance of item, this involves a linear scan. Returns -1 if not found
+	isize find(T e){
+		for(isize i = 0; i < _length; i++){
+			if(_data[i] == e){ return i; }
+		}
+		return -1;
+	}
+
 	// Get a sub-slice in the interval a..slice.size()
 	Slice<T> slice(isize from){
 		bounds_check_assert(from >= 0 && from < _length, "Index to sub-slice is out of bounds");
@@ -421,25 +429,25 @@ struct String {
 	isize size() const { return _length; }
 
 	// Size (in codepoints)
-	isize rune_count();
+	isize rune_count() const;
 
 	// Get a sub-string in the byte interval a..b (end exclusive)
-	String sub(isize from, isize to);
+	String sub(isize from, isize to) const;
 
 	// Get an utf8 iterator from string
-	utf8::Iterator iterator();
+	utf8::Iterator iterator() const;
 
 	// Get an utf8 iterator from string, already at the end, to be used for reverse iteration
-	utf8::Iterator iterator_reversed();
+	utf8::Iterator iterator_reversed() const;
 
 	// Trim leading and trailing runes from cutset
-	String trim(String cutset);
+	String trim(String cutset) const;
 	
 	// Trim leading runes from cutset
-	String trim_leading(String cutset);
+	String trim_leading(String cutset) const;
 
 	// Trim trailing from cutset
-	String trim_trailing(String cutset);
+	String trim_trailing(String cutset) const;
 
 	// Create string from C-style string
 	static String from_cstr(cstring data){
@@ -481,6 +489,12 @@ struct String {
 	bool operator==(String lhs) const {
 		if(lhs._length != _length){ return false; }
 		return mem::compare(_data, lhs._data, _length) == 0;
+	}
+
+	// Check if 2 strings are different
+	bool operator!=(String lhs) const {
+		if(lhs._length != _length){ return false; }
+		return mem::compare(_data, lhs._data, _length) != 0;
 	}
 };
 

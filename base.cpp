@@ -268,7 +268,7 @@ bool Iterator::prev(rune* r, i8* len){
 } /* Namespace utf8 */
 
 //// Strings ///////////////////////////////////////////////////////////////////
-isize String::rune_count(){
+isize String::rune_count() const {
 	[[maybe_unused]] rune r;
 	[[maybe_unused]] i8 n;
 	auto it = iterator();
@@ -277,9 +277,9 @@ isize String::rune_count(){
 	return size;
 }
 
-String String::sub(isize from, isize to){
+String String::sub(isize from, isize to) const {
 	bounds_check_assert(from <= to, "Improper slicing range");
-	bounds_check_assert(from >= 0 && from < _length, "Index to sub-string is out of bounds");
+	bounds_check_assert(from >= 0 && from <= _length, "Index to sub-string is out of bounds");
 	bounds_check_assert(to >= 0 && to <= _length, "Index to sub-string is out of bounds");
 	String s;
 	s._length = to - from;
@@ -289,26 +289,26 @@ String String::sub(isize from, isize to){
 
 constexpr isize MAX_CUTSET_LEN = 128;
 
-String String::trim(String cutset){
-	String trimmed = this->trim_trailing(cutset).trim_trailing(cutset);
+String String::trim(String cutset) const {
+	String trimmed = this->trim_leading(cutset).trim_trailing(cutset);
 	return trimmed;
 }
 
-utf8::Iterator String::iterator(){
+utf8::Iterator String::iterator() const {
 	return {
 		.data = Slice<byte>::from_pointer((byte*)_data, _length),
 		.current = 0,
 	};
 }
 
-utf8::Iterator String::iterator_reversed(){
+utf8::Iterator String::iterator_reversed() const {
 	return {
 		.data = Slice<byte>::from_pointer((byte*)_data, _length),
 		.current = _length,
 	};
 }
 
-String String::trim_leading(String cutset){
+String String::trim_leading(String cutset) const {
 	debug_assert(cutset.size() <= MAX_CUTSET_LEN, "Cutset string exceeds MAX_CUTSET_LEN");
 
 	rune set[MAX_CUTSET_LEN] = {0};
@@ -350,10 +350,10 @@ String String::trim_leading(String cutset){
 		}
 	}
 
-	unimplemented();
+	return this->sub(cut_after, _length);
 }
 
-String String::trim_trailing(String cutset){
+String String::trim_trailing(String cutset) const {
 	debug_assert(cutset.size() <= MAX_CUTSET_LEN, "Cutset string exceeds MAX_CUTSET_LEN");
 
 	rune set[MAX_CUTSET_LEN] = {0};
@@ -395,7 +395,7 @@ String String::trim_trailing(String cutset){
 		}
 	}
 
-	unimplemented();
+	return this->sub(0, cut_until);
 }
 
 

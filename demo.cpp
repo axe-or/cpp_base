@@ -51,16 +51,8 @@ std::ostream& operator<<(std::ostream& os, Slice<T> s){
 #include "tests.cpp"
 
 int main(){
-	String s = "Hello, 世界";
-	defer(print("Hello"));
-    print(s);
-
-	auto it = s.iterator();
-	for(rune r = it.next(); r != 0; r = it.next()){
-		print(Codepoint(r));
-	}
-
 	test_slice();
+	test_string();
 
     return 0;
 }
