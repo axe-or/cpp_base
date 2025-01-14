@@ -530,6 +530,7 @@ static void* _heap_allocator_func (
 		case M::Resize: break;
 
 		case M::Free: {
+		    ensure(valid_alignment(align), "Invalid alignment");
 			auto p = (byte*)old_ptr;
 			::operator delete[](p, std::align_val_t(align));
 		} break;
