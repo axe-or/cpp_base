@@ -8,7 +8,6 @@ void print(T x){
 
 template<typename T, typename ...Args>
 void print(T x, Args... rest){
-    std::cout << std::boolalpha;
     std::cout << x << ' ';
     print(rest...);
 }

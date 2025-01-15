@@ -242,6 +242,58 @@ struct Slice {
 	}
 };
 
+//// Option ////////////////////////////////////////////////////////////////////
+template<typename T>
+struct Option {
+	T _inner;
+	bool _has_value = false;
+
+	// Safe to get value
+	bool ok() const { return _has_value; }
+
+	// Get the value, panics otherwhise
+	T get(){
+		if(_has_value){
+			return _inner;
+		}
+		panic("Attempt to get() empty option");
+	}
+
+	// Get the value, if nil, use a default one
+	T get_or(T alt){
+		if(_has_value){
+			return _inner;
+		}
+		return alt;
+	}
+
+	// Get the value, regardless if initialized
+	T get_unchecked(){
+		return _inner;
+	}
+
+	// Destroy inner value, if any
+	void clear(){
+		if(_has_value){
+			_inner.~T();
+			_has_value = false;
+		}
+	}
+
+	// Implict constructors
+	Option(){}
+	Option(T v) : _inner(v), _has_value(true) {}
+
+	static Option<T> empty(){
+		return Option<T>();
+	}
+
+	static Option<T> from(T v){
+		return Option<T>(v);
+	}
+
+};
+
 //// Memory ////////////////////////////////////////////////////////////////////
 namespace mem {
 enum class Allocator_Op : byte {
@@ -604,7 +656,16 @@ struct Dynamic_Array {
 		length -= 1;
 	}
 
-	// Get contents as slice
+	// Pop element form end of the array, returns if element was popped
+	bool pop(){
+		if(length > 0){
+			length -= 1;
+			return true;
+		}
+		return false;
+	}
+
+	// Get current array data as a slice
 	Slice<T> slice(){
 		return Slice<T>::from_pointer(data, length);
 	}
@@ -642,6 +703,7 @@ struct Dynamic_Array {
 	static Dynamic_Array<T> from(mem::Allocator allocator){
 		Dynamic_Array<T> arr;
 		arr.allocator = allocator;
+		arr.resize(dynamic_array_default_capacity);
 		return arr;
 	}
 };

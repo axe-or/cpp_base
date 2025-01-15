@@ -1,4 +1,2 @@
-@echo off
-chcp 65001
-g++ -g -Wall -std=c++17 -DTARGET_OS_WINDOWS demo.cpp base.cpp -o demo && demo.exe
-
+chcp 65001 >nul
+g++ -g -Wall -Wextra -Wno-unused-label -std=c++17 -DTARGET_OS_WINDOWS demo.cpp base.cpp -o demo && demo.exe
