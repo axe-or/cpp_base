@@ -103,5 +103,25 @@ void test_dynamic_array(){
 	arr.remove_unordered(0);
 	arr.remove_unordered(arr.size() - 1);
 	print(arr);
+
+	print("Insert ordered");
+	arr.clear();
+	for(isize i = 0; i < 20; i++)
+		arr.append(i);
+	print(arr);
+	arr.insert_ordered(10, 69);
+	arr.insert_ordered(0, 69);
+	arr.insert_ordered(arr.size(), 69);
+	print(arr);
+
+	print("Insert unordered");
+	arr.clear();
+	for(isize i = 0; i < 20; i++)
+		arr.append(i);
+	print(arr);
+	arr.insert_unordered(10, 69);
+	arr.insert_unordered(0, 69);
+	arr.insert_unordered(arr.size(), 69);
+	print(arr);
 }
 

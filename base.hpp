@@ -634,7 +634,7 @@ struct Dynamic_Array {
 	// Add element to end of array, returns if succeeded
 	bool append(T e){
 		if(length >= capacity){
-			isize new_cap = max(capacity, dynamic_array_default_capacity) * 2;
+			isize new_cap = max(capacity * 2, dynamic_array_default_capacity);
 			if(!this->resize(new_cap)){ return false; }
 		}
 
@@ -660,6 +660,42 @@ struct Dynamic_Array {
 		bounds_check_assert(idx >= 0 && idx < length, "Out of bounds remove index");
 		data[idx] = data[length - 1];
 		length -= 1;
+	}
+
+	// Insert element at index, keeps elements in order
+	bool insert_ordered(isize idx, T e){
+		bounds_check_assert(idx >= 0 && idx <= length, "Out of bounds insertion index");
+		if(idx == length){
+			return append(e);
+		}
+
+		if(length >= capacity){
+			isize new_cap = max(capacity * 2, dynamic_array_default_capacity);
+			if(!this->resize(new_cap)){ return false; }
+		}
+
+		mem::copy(&data[idx + 1], &data[idx], (length - idx) * sizeof(T));
+		data[idx] = e;
+		length += 1;
+		return true;
+	}
+
+	// Insert element at index, does not keep elements in order
+	bool insert_unordered(isize idx, T e){
+		bounds_check_assert(idx >= 0 && idx <= length, "Out of bounds insertion index");
+		if(idx == length){
+			return append(e);
+		}
+
+		if(length >= capacity){
+			isize new_cap = max(capacity * 2, dynamic_array_default_capacity);
+			if(!this->resize(new_cap)){ return false; }
+		}
+
+		data[length] = data[idx];
+		data[idx] = e;
+		length += 1;
+		return true;
 	}
 
 	// Pop element form end of the array, returns if element was popped
