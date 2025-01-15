@@ -165,10 +165,16 @@ struct Slice {
 	T* _data;
 	isize _length;
 
+	// Length of slice (in elements)
 	isize size() const { return _length; }
 
+	// Length of slice (in bytes)
+	isize raw_size() const { return _length * sizeof(T); }
+
+	// Raw pointer to slice's backing memory
 	T* raw_data() const { return _data; }
 
+	// Is the slice empty?
 	bool empty() const { return _length == 0 || _data == nullptr; }
 
 	T& operator[](isize idx) noexcept {
