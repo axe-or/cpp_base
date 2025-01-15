@@ -327,13 +327,13 @@ struct Allocator {
 		return Slice<T>::from_pointer(p, n);
 	}
 
-	// Helper to destroy any type
+	// Helper to deallocate any trivial type
 	template<typename T>
 	void destroy(T* p){
 		this->free((void*)p, sizeof(T), alignof(T));
 	}
 
-	// Helper to destroy any type
+	// Helper to deallocate any trivial type
 	template<typename T>
 	void destroy(Slice<T> s){
 		T* buf = s.raw_data();
@@ -585,7 +585,49 @@ struct Dynamic_Array {
 		return true;
 	}
 
-	Slice<T> slice(isize from, isize to){}
+	// Reset the array's length, keeps its capacity
+	void clear(){
+		length = 0;
+	}
+
+	// Remove element at index, keeping the order
+	void remove_ordered(isize idx){
+		bounds_check_assert(idx >= 0 && idx < length, "Out of bounds remove index");
+		mem::copy(&data[idx], &data[idx + 1], (length - idx) * sizeof(T));
+		length -= 1;
+	}
+
+	// Remove element at index, does not keep element order
+	void remove_unordered(isize idx){
+		bounds_check_assert(idx >= 0 && idx < length, "Out of bounds remove index");
+		data[idx] = data[length - 1];
+		length -= 1;
+	}
+
+	// Get contents as slice
+	Slice<T> slice(){
+		return Slice<T>::from_pointer(data, length);
+	}
+
+	// Get the sub-slice of elements after index (inclusive)
+	Slice<T> slice_right(isize idx){
+		bounds_check_assert(idx >= 0 && idx < length, "Index to sub-slice is out of bounds");
+		return Slice<T>::from_pointer(&data[idx], length - idx);
+	}
+
+	// Get the sub-slice of elements before index (exclusive)
+	Slice<T> slice_left(isize idx){
+		bounds_check_assert(idx >= 0 && idx < length, "Index to sub-slice is out of bounds");
+		return Slice<T>::from_pointer(data, idx);
+	}
+
+	// Get the sub-slice of interval a..b (end exclusive)
+	Slice<T> slice(isize from, isize to){
+		bounds_check_assert(from <= to, "Improper slicing range");
+		bounds_check_assert(from >= 0 && from < length, "Index to sub-slice is out of bounds");
+		bounds_check_assert(to >= 0 && to <= length, "Index to sub-slice is out of bounds");
+		return Slice<T>::from_pointer(&data[from], to - from);
+	}
 
 	T& operator[](isize idx) noexcept {
 		bounds_check_assert(idx >= 0 && idx < length, "Index to dyanamic array is out of bounds");

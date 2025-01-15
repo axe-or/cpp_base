@@ -81,8 +81,27 @@ void test_string(){
 
 void test_dynamic_array(){
 	auto arr = Dynamic_Array<i32>::from(mem::heap_allocator());
+
+	print("Append");
 	print(arr);
-	arr.append(0);
+	for(isize i = 0; i < 20; i++)
+		arr.append(i);
+	print(arr);
+
+	print("Remove ordered");
+	arr.remove_ordered(10);
+	arr.remove_ordered(0);
+	arr.remove_ordered(arr.size() - 1);
+	print(arr);
+
+	print("Remove unordered");
+	arr.clear();
+	for(isize i = 0; i < 20; i++)
+		arr.append(i);
+	print(arr);
+	arr.remove_unordered(10);
+	arr.remove_unordered(0);
+	arr.remove_unordered(arr.size() - 1);
 	print(arr);
 }
 
