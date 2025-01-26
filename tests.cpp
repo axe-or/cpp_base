@@ -12,7 +12,7 @@ void expect_ex(bool pred, cstring msg, Source_Location loc){
 		test::failed.fetch_add(1);
 	}
 }
-#define expect(Expr) expect_ex((Expr), #Expr, this_location())
+#define expect(Expr) expect_ex((Expr), #Expr, current_source_location())
 
 void test_slice(){
 	auto allocator = mem::heap_allocator();

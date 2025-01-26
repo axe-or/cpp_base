@@ -2,26 +2,25 @@
 #include <stdio.h>
 
 //// Assert ////////////////////////////////////////////////////////////////////
-void debug_assert_ex(bool pred, cstring msg, Source_Location loc){
-	#if defined(NDEBUG) || defined(RELEASE_MODE)
+void debug_assert(bool pred, cstring msg, Source_Location const& loc){
+	#if defined(ndebug) || defined(release_mode)
 		(void)pred; (void)msg;
 	#else
-	[[unlikely]]
-	if(!pred){
-		fprintf(stderr, "(%s:%d) Failed assert: %s\n", loc.filename, loc.line, msg);
+	[[unlikely]] if(!pred){
+		fprintf(stderr, "(%s:%d) failed assert: %s\n", loc.filename, loc.line, msg);
 		abort();
 	}
 	#endif
 }
 
-void ensure_ex(bool pred, cstring msg, Source_Location loc){
+void ensure(bool pred, cstring msg, Source_Location const& loc){
 	[[unlikely]] if(!pred){
 		fprintf(stderr, "[%s:%d %s()] Failed assert: %s\n", loc.filename, loc.line, loc.caller_name, msg);
 		abort();
 	}
 }
 
-void bounds_check_assert_ex(bool pred, cstring msg, Source_Location loc){
+void bounds_check_assert(bool pred, cstring msg, Source_Location const& loc){
 	#if defined(DISABLE_BOUNDS_CHECK)
 		(void)pred; (void)msg;
 	#else
@@ -33,15 +32,13 @@ void bounds_check_assert_ex(bool pred, cstring msg, Source_Location loc){
 	#endif
 }
 
-[[noreturn]]
-void panic(cstring msg){
-	fprintf(stderr, "Panic: %s\n", msg);
+[[noreturn]] void panic(cstring msg, Source_Location const& loc){
+	fprintf(stderr, "[%s:%d %s()] Panic: %s\n", loc.filename, loc.line, loc.caller_name, msg);
 	abort();
 }
 
-[[noreturn]]
-void unimplemented(){
-	fprintf(stderr, "Unimplemented code\n");
+[[noreturn]] void unimplemented(Source_Location const& loc){
+	fprintf(stderr, "[%s:%d %s()] Unimplemented code.\n", loc.filename, loc.line, loc.caller_name);
 	abort();
 }
 
@@ -417,7 +414,7 @@ void* Arena::alloc(isize size, isize align){
 	uintptr required = arena_required_mem(current, size, align);
 
 	if(required > available){
-		return null;
+		return nullptr;
 	}
 
 	offset += required;
@@ -438,14 +435,14 @@ void* Arena::resize(void* ptr, isize new_size){
 		isize last_allocation_size = current - last_allocation;
 
 		if((current - last_allocation_size + new_size) > limit){
-			return null; /* No space left*/
+			return nullptr; /* No space left*/
 		}
 
 		offset += new_size - last_allocation_size;
 		return ptr;
 	}
 
-	return null;
+	return nullptr;
 }
 
 static
@@ -482,7 +479,7 @@ void* arena_allocator_func(
 		} break;
 	}
 
-	return null;
+	return nullptr;
 }
 
 Allocator Arena::allocator(){

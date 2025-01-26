@@ -10,11 +10,10 @@
 #include <float.h>
 
 #include <atomic>
+#include <source_location>
 #include <new>
 
 //// Essentials ////////////////////////////////////////////////////////////////
-#define null NULL
-
 using i8  = int8_t;
 using i16 = int16_t;
 using i32 = int32_t;
@@ -38,6 +37,8 @@ using f32 = float;
 using f64 = double;
 
 using cstring = char const *;
+
+constexpr isize cache_line_size = 64;
 
 template<typename T>
 using Atomic = std::atomic<T>;
@@ -121,43 +122,34 @@ struct Source_Location {
     i32 line;
 };
 
-#define this_location() this_location_()
-
-#define this_location_() (Source_Location){ \
-    .filename = __FILE__, \
-    .caller_name = __func__, \
-    .line = __LINE__, \
+static inline constexpr
+Source_Location current_source_location(std::source_location s = std::source_location::current()){
+	return {
+		.filename = s.file_name(),
+		.caller_name = s.function_name(),
+		.line = static_cast<i32>(s.line()),
+	};
 }
 
+#define caller_location Source_Location const& call_loc = current_source_location()
+
 //// Assert ////////////////////////////////////////////////////////////////////
+
 // Crash if `pred` is false, this is disabled in non-debug builds
-void debug_assert_ex(bool pred, cstring msg, Source_Location loc);
-
-void bounds_check_assert_ex(bool pred, cstring msg, Source_Location loc);
-
-#if defined(NDEBUG) || defined(RELEASE_MODE)
-#define debug_assert(Pred, Msg) ((void)0)
-#else
-#define debug_assert(Pred, Msg) debug_assert_ex(Pred, Msg, this_location())
-#endif
-
-#if defined(DISABLE_BOUNDS_CHECK)
-#define bounds_check_assert(Pred, Msg) ((void)0)
-#else
-#define bounds_check_assert(Pred, Msg) bounds_check_assert_ex(Pred, Msg, this_location())
-#endif
+void debug_assert(bool pred, cstring msg, caller_location);
 
 // Crash if `pred` is false, this is always enabled
-void ensure_ex(bool pred, cstring msg, Source_Location loc);
+void ensure(bool pred, cstring msg, caller_location);
 
-#define ensure(Pred, Msg) ensure_ex((Pred), Msg, this_location())
+// Similar to debug_assert, but explicitly for bounds checking
+void bounds_check_assert(bool pred, cstring msg, caller_location);
 
 // Crash the program with a fatal error
-[[noreturn]] void panic(cstring msg);
+[[noreturn]] void panic(cstring msg, caller_location);
 
 // Crash the program due to unimplemented code paths, this should *only* be used
 // during development
-[[noreturn]] void unimplemented();
+[[noreturn]] void unimplemented(caller_location);
 
 //// Slices ////////////////////////////////////////////////////////////////////
 template<typename T>
@@ -505,6 +497,7 @@ struct String {
 
 //// Arena Allocator ///////////////////////////////////////////////////////////
 namespace mem {
+
 struct Arena {
 	isize offset;
 	isize capacity;
@@ -533,8 +526,91 @@ struct Arena {
 namespace mem {
 // Just a wrapper around aligned_alloc and free
 Allocator heap_allocator();
-
 } /* Namespace mem */
+
+
+//// Concurrent Queue //////////////////////////////////////////////////////////
+template<typename T>
+struct Concurrent_Queue {
+	struct Slot {
+		Atomic<usize> sequence;
+		T data;
+	};
+
+	Slot* slots = nullptr;
+	isize capacity = 0;
+	// Alignas is used to avoid 'false sharing'
+	alignas(cache_line_size) Atomic<usize> enqueue_pos = 0;
+	alignas(cache_line_size) Atomic<usize> dequeue_pos = 0;
+
+	bool enqueue(T val){
+		Slot* slot = nullptr;
+		usize pos = enqueue_pos.load(std::memory_order_relaxed);
+		while(true) {
+			slot = &slots[pos & (capacity - 1)]; // Fast modulo for powers of 2
+			usize seq = slot->sequence_.load(std::memory_order_acquire);
+			isize delta = (isize)seq - (isize)pos;
+			if (delta == 0) {
+				if (enqueue_pos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+					break;
+				}
+			} else if (delta < 0) {
+				return false;
+			} else {
+				pos = enqueue_pos.load(std::memory_order_relaxed);
+			}
+		}
+
+		slot->data = val;
+		slot->sequence.store(pos + 1, std::memory_order_release);
+
+		return true;
+	}
+
+	bool dequeue(T& data) {
+		Slot *slot;
+		usize pos = dequeue_pos.load(std::memory_order_relaxed);
+		while(true) {
+			slot = &slots[pos & (capacity - 1)]; // Fast modulo for powers of 2
+			usize sequence = slot->sequence_.load(std::memory_order_acquire);
+			isize delta = (isize)sequence - (isize)(pos + 1);
+			if (delta == 0) {
+				if (dequeue_pos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+					break;
+				}
+			} else if (delta < 0) {
+				return false;
+			} else {
+				pos = dequeue_pos.load(std::memory_order_relaxed);
+			}
+		}
+
+		data = slot->data;
+		slot->sequence.store(pos + capacity, std::memory_order_release);
+
+		return true;
+	}
+
+	// VERY IMPORTANT: The Allocator must allocate in a region of memory that 
+	// is visible to all threads. If you're in doubt, use Concurrent_Queue::create() instead.
+	static Concurrent_Queue<T> from_allocator(mem::Allocator al, isize capacity){
+		Concurrent_Queue<T> q;
+		ensure(((capacity & (capacity - 1)) == 0) && (capacity >= 2), "Capacity must be a power of 2 and >= 2");
+		q.slots = al.alloc(sizeof(Slot) * capacity, alignof(Slot));
+		debug_assert(q.slots, "Failed to create concurrent queue");
+		if(q.slots){
+			q.capacity = capacity;
+			q.dequeue_pos = 0;
+			q.enqueue_pos = 0;
+		}
+		return q;
+	}
+
+	// Create a new Concurrent_Queue, uses heap_allocator() to acquire storage
+	static Concurrent_Queue<T> create(isize capacity){
+		return Concurrent_Queue<T>::from_allocator(mem::heap_allocator(), capacity);
+	}
+};
 
 //// Dynamic Array /////////////////////////////////////////////////////////////
 static constexpr isize dynamic_array_default_capacity = 16;
