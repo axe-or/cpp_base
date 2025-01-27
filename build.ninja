@@ -1,0 +1,22 @@
+archiver = ar
+linker = clang++
+compiler = clang++
+cflags = -std=c++20 -I. -fPIC -fno-strict-aliasing -Wall -Wextra -Os
+ldflags = 
+
+rule compile
+  command = $compiler $cflags -c $in -o $out
+rule link
+  command = $linker -o $out $in $ldflags
+rule archive
+  command = $archiver rcs $out $in
+
+build demo.cpp.o: compile demo.cpp | src/base.hpp tests.cpp
+build demo: link demo.cpp.o base.a | base.a src/base.hpp tests.cpp
+build src/arena.cpp.o: compile src/arena.cpp | src/base.hpp
+build src/assert.cpp.o: compile src/assert.cpp | src/base.hpp
+build src/heap_allocator.cpp.o: compile src/heap_allocator.cpp | src/base.hpp
+build src/memory.cpp.o: compile src/memory.cpp | src/base.hpp
+build src/strings.cpp.o: compile src/strings.cpp | src/base.hpp
+build src/utf8.cpp.o: compile src/utf8.cpp | src/base.hpp
+build base.a: archive src/arena.cpp.o src/assert.cpp.o src/heap_allocator.cpp.o src/memory.cpp.o src/strings.cpp.o src/utf8.cpp.o | src/base.hpp

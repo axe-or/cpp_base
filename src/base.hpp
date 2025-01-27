@@ -335,6 +335,12 @@ struct Allocator {
 
 };
 
+// Check if `align` is a valid memory alignment
+static inline
+bool valid_alignment(isize align){
+	return ((align & (align - 1)) == 0) && (align > 0);
+}
+
 // Set n bytes of p to value.
 void set(void* p, byte val, isize nbytes);
 
