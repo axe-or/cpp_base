@@ -2,7 +2,7 @@
 function Config()
 	local RELEASE_BUILD = true
 
-	local CFLAGS  = {'-std=c++20', '-I.', '-fPIC', '-fno-strict-aliasing', '-Wall', '-Wextra'}
+	local CFLAGS  = {'-std=c++20', '-I.', '-fPIC', '-Wall', '-Wextra', '-Wno-unused-label'}
 	local LDFLAGS = {}
 
 	if RELEASE_BUILD then

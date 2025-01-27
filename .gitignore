@@ -1,5 +1,6 @@
 demo
 # Prerequisites
+.ninja_log
 *.d
 
 # Object files
