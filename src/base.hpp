@@ -88,6 +88,13 @@ T clamp(T lo, T x, T hi){
 	return min(max(lo, x), hi);
 }
 
+template<typename T>
+void swap(T* a, T* b){
+	T tmp = *a;
+	*a = *b;
+	*b = tmp;
+}
+
 static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Bad float size");
 static_assert(sizeof(isize) == sizeof(usize), "Mismatched (i/u)size");
 static_assert(sizeof(void(*)(void)) == sizeof(void*), "Function pointers and data pointers must be of the same width");
@@ -158,6 +165,8 @@ struct Slice {
 	isize _length;
 
 	isize size() const { return _length; }
+
+	isize byte_size() const { return _length * sizeof(T); }
 
 	T* raw_data() const { return _data; }
 
@@ -501,6 +510,58 @@ struct String {
 	}
 };
 
+//// Slice Utilities ///////////////////////////////////////////////////////////
+namespace slices {
+
+template<typename T>
+using Less_Than_Compare = bool (*) (T a, T b);
+
+template<typename T>
+bool default_lt_compare(T a, T b){
+	return a < b;
+}
+
+// Clone slice with allocator, returns empty slice on failure
+template<typename T>
+Slice<T> clone(Slice<T> s, mem::Allocator al){
+	auto res = al.make<T>(s._length);
+	mem::copy_no_overlap(res._data, s._data, s.byte_size());
+	return res;
+}
+
+// Copy elements of one slice to another, returns the destination slice for convenience
+template<typename T>
+Slice<T> copy(Slice<T> dest, Slice<T> source){
+	isize n = min(dest._length, source._length);
+	for(isize i = 0; i < n; i ++){
+		dest._data[i] = source._data[i];
+	}
+	return dest;
+}
+
+
+// Sort slice by insertion_sort in-palce, returns back sorted slice for convenience.
+template<typename T>
+Slice<T> insertion_sort(Slice<T> s, Less_Than_Compare<T> lt = default_lt_compare){
+	T* data = s.raw_data();
+	for(isize i = 1; i < s._length; i ++){
+		isize j = i;
+
+		while(j > 0 && !lt(data[j - 1], data[j])){
+			swap(&data[j], &data[j -  1]);
+			j -= 1;
+		}
+	}
+
+	return s;
+}
+
+// template<typename T>
+// Slice<T> quick_sort(Slice<T> s, Less_Than_Compare<T> cmp = default_lt_compare){
+// }
+
+}
+
 //// Arena Allocator ///////////////////////////////////////////////////////////
 namespace mem {
 
@@ -534,8 +595,9 @@ namespace mem {
 Allocator heap_allocator();
 } /* Namespace mem */
 
-
 //// Concurrent Queue //////////////////////////////////////////////////////////
+// Lock-free multi producer multi consumer queue, heavily inspired by the great article by Dmitry Vyukov
+// https://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue
 template<typename T>
 struct Concurrent_Queue {
 	struct Slot {
@@ -727,5 +789,4 @@ struct Dynamic_Array {
 		return arr;
 	}
 };
-
 

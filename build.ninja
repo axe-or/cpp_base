@@ -1,8 +1,8 @@
-archiver = ar
-linker = clang++
 compiler = clang++
-cflags = -std=c++20 -I. -fPIC -fno-strict-aliasing -Wall -Wextra -Os
+linker = clang++
 ldflags = 
+cflags = -std=c++20 -I. -fPIC -Wall -Wextra -Wno-unused-label -O0 -g
+archiver = ar
 
 rule compile
   command = $compiler $cflags -c $in -o $out

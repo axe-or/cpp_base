@@ -103,5 +103,14 @@ void test_dynamic_array(){
 	arr.remove_unordered(0);
 	arr.remove_unordered(arr.size() - 1);
 	print(arr);
+
+	{
+		auto a = slices::clone(arr.slice(), mem::heap_allocator());
+		auto b = slices::clone(a, mem::heap_allocator());
+		print("Insertion Sort");
+		print(a);
+		slices::insertion_sort(a);
+		print(a);
+	}
 }
 

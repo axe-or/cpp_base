@@ -5,7 +5,7 @@ Base utilities to writing C++
 Requires C++20 for proper source location support Can be compiled using `ninja`
 for incremental compilation or or just by doing a unity build of `src/lib.cpp`
 
-Incremental build
+Incremental build (generate with `lua build.lua`)
 ```
 ninja -j8
 ```
