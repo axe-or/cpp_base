@@ -23,7 +23,7 @@ using U64 = uint64_t;
 
 using uint = unsigned int;
 using Byte = uint8_t;
-using rune = I32;
+using Rune = I32;
 
 using Size = ptrdiff_t;
 
@@ -107,92 +107,19 @@ namespace impl_defer {
 	}
 }
 
+[[noreturn]]
+void panic(char const * msg);
 
+void debug_assert(bool pred, char const * msg);
 
-	// Slice<T> slice_right(Size idx){
-	// 	bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
-	// 	Slice<T> s;
-	// 	s._length = _length - idx;
-	// 	s._data = &_data[idx];
-	// 	return s;
-	// }
-	//
-	// // Get the sub-slice of elements before index (exclusive)
-	// Slice<T> slice_left(Size idx){
-	// 	bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
-	// 	Slice<T> s;
-	// 	s._length = idx;
-	// 	s._data = _data;
-	// 	return s;
-	// }
-	//
+void ensure(bool pred, char const * msg);
 
-	// // Get the sub-slice of interval a..b (end exclusive)
-	// Slice<T> slice(Size from, Size to){
-	// 	bounds_check_assert(from <= to, "Improper slicing range");
-	// 	bounds_check_assert(from >= 0 && from < _length, "Index to sub-slice is out of bounds");
-	// 	bounds_check_assert(to >= 0 && to <= _length, "Index to sub-slice is out of bounds");
-	//
-	// 	Slice<T> s;
-	// 	s._length = to - from;
-	// 	s._data = &_data[from];
-	// 	return s;
-	// }
-
-#ifndef NO_STDIO
-#include <stdio.h>
-#endif
-
-// Crash the program with a fatal error
-[[noreturn]] static inline
-void panic([[maybe_unused]] char const * msg){
-	#ifndef NO_STDIO
-	fprintf(stderr, "Panic: %s\n", msg);
-	#endif
-	__builtin_trap();
-}
-
-// Crash if `pred` is false, this is disabled in non-debug builds
-static inline
-void debug_assert([[maybe_unused]] bool pred, [[maybe_unused]] char const * msg){
-	#if !defined(RELEASE_MODE) && !defined(DISABLE_ASSERT)
-		[[unlikely]] if(!pred){
-			#ifndef NO_STDIO
-			fprintf(stderr, "Assertion failed: %s\n", msg);
-			#endif
-		}
-		__builtin_trap();
-	#endif
-}
-
-// Crash if `pred` is false, this is always enabled
-static inline
-void ensure(bool pred, char const * msg){
-	[[unlikely]] if(!pred){
-		#ifndef NO_STDIO
-		fprintf(stderr, "Assertion failed: %s\n", msg);
-		#endif
-	}
-	__builtin_trap();
-}
-
-// Similar to debug_assert, but explicitly for bounds checking
-static inline
-void bounds_check_assert(bool pred, char const * msg){
-	#if !defined(DISABLE_BOUNDS_CHECK)
-		[[unlikely]] if(!pred){
-			#ifndef NO_STDIO
-			fprintf(stderr, "Bounds check error: %s\n", msg);
-			#endif
-		}
-		__builtin_trap();
-	#endif
-}
+void bounds_check_assert(bool pred, char const * msg);
 
 template<typename T>
 struct Slice {
 private:
-	T*   _data = nullptr;
+	T*   _data   = nullptr;
 	Size _length = 0;
 public:
 	T& operator[](Size idx) noexcept {
@@ -255,5 +182,95 @@ public:
 
 	bool empty() const { return _length == 0 || _data == nullptr; }
 };
+
+
+namespace mem {
+void set(void* p, Byte val, Size nbytes);
+
+void copy(void* dest, void const * src, Size nbytes);
+
+void copy_no_overlap(void* dest, void const * src, Size nbytes);
+
+I32 compare(void const * a, void const * b, Size nbytes);
+
+Uintptr align_forward(Uintptr p, Uintptr a);
+
+Uintptr align_forward(Size p, Size a);
+
+bool valid_alignment(Size a);
+
+namespace virt {
+	struct PageBlock {
+		Size reserved;
+		Size commited;
+		void* pointer;
+
+		static PageBlock make(Size nbytes);
+
+		void destroy();
+
+		void* push(Size nbytes);
+
+		void pop(Size nbytes);
+	};
+
+
+	void* reserve(Size nbytes);
+
+	void release(void* pointer);
+
+	void* commit(void* pointer, Size nbytes);
+
+	void decommit(void* pointer, Size nbytes);
+};
+
+enum struct ArenaType : U32 {
+	Buffer = 0,
+	Virtual,
+};
+
+struct Arena {
+	ArenaType type;
+	Size offset;
+};
+
+};
+
+namespace utf8 {
+struct EncodeResult {
+	Byte bytes[4];
+	I32 len;
+};
+
+struct DecodeResult {
+	Rune codepoint;
+	I32 len;
+};
+
+constexpr Rune ERROR = 0xfffd;
+
+// The error rune, Byte encoded
+constexpr EncodeResult ERROR_ENCODED = {
+	.bytes = {0xef, 0xbf, 0xbd},
+	.len = 0,
+};
+
+EncodeResult encode(Rune c);
+
+DecodeResult utf8_decode(Slice<Byte> buf);
+
+struct Iterator {
+	Slice<Byte> data;
+	Size current;
+
+	bool next(Rune* r, I32* len);
+
+	bool prev(Rune* r, I32* len);
+
+	Rune next();
+
+	Rune prev();
+};
+} /* Namespace utf8 */
 
 #endif /* Include guard */

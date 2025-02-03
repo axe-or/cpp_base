@@ -390,7 +390,6 @@ struct Decode_Result {
 constexpr rune ERROR = 0xfffd;
 
 // The error rune, byte encoded
-constexpr Encode_Result ERROR_ENCODED = {
 	.bytes = {0xef, 0xbf, 0xbd},
 	.len = 0,
 };

@@ -1,35 +1,35 @@
 #include "base.hpp"
 
 namespace utf8 {
-constexpr i32 RANGE1 = 0x7f;
-constexpr i32 RANGE2 = 0x7ff;
-constexpr i32 RANGE3 = 0xffff;
-constexpr i32 RANGE4 = 0x10ffff;
+constexpr I32 RANGE1 = 0x7f;
+constexpr I32 RANGE2 = 0x7ff;
+constexpr I32 RANGE3 = 0xffff;
+constexpr I32 RANGE4 = 0x10ffff;
 
-constexpr i32 UTF16_SURROGATE1 = 0xd800;
-constexpr i32 UTF16_SURROGATE2 = 0xdfff;
+constexpr I32 UTF16_SURROGATE1 = 0xd800;
+constexpr I32 UTF16_SURROGATE2 = 0xdfff;
 
-constexpr i32 MASK2 = 0x1f; /* 0001_1111 */
-constexpr i32 MASK3 = 0x0f; /* 0000_1111 */
-constexpr i32 MASK4 = 0x07; /* 0000_0111 */
+constexpr I32 MASK2 = 0x1f; /* 0001_1111 */
+constexpr I32 MASK3 = 0x0f; /* 0000_1111 */
+constexpr I32 MASK4 = 0x07; /* 0000_0111 */
 
-constexpr i32 MASKX = 0x3f; /* 0011_1111 */
+constexpr I32 MASKX = 0x3f; /* 0011_1111 */
 
-constexpr i32 SIZE2 = 0xc0; /* 110x_xxxx */
-constexpr i32 SIZE3 = 0xe0; /* 1110_xxxx */
-constexpr i32 SIZE4 = 0xf0; /* 1111_0xxx */
+constexpr I32 SIZE2 = 0xc0; /* 110x_xxxx */
+constexpr I32 SIZE3 = 0xe0; /* 1110_xxxx */
+constexpr I32 SIZE4 = 0xf0; /* 1111_0xxx */
 
-constexpr i32 CONT = 0x80; /* 10xx_xxxx */
+constexpr I32 CONT = 0x80; /* 10xx_xxxx */
 
 static inline
-bool is_continuation_byte(rune c){
-	static const rune CONTINUATION1 = 0x80;
-	static const rune CONTINUATION2 = 0xbf;
+bool is_continuation_byte(Rune c){
+	static const Rune CONTINUATION1 = 0x80;
+	static const Rune CONTINUATION2 = 0xbf;
 	return (c >= CONTINUATION1) && (c <= CONTINUATION2);
 }
 
-Encode_Result encode(rune c){
-	Encode_Result res = {};
+EncodeResult encode(Rune c){
+	EncodeResult res = {};
 
 	if(is_continuation_byte(c) ||
 	   (c >= UTF16_SURROGATE1 && c <= UTF16_SURROGATE2) ||
@@ -63,16 +63,16 @@ Encode_Result encode(rune c){
 	return res;
 }
 
-constexpr Decode_Result DECODE_ERROR = { .codepoint = ERROR, .len = 0 };
+constexpr DecodeResult DECODE_ERROR = { .codepoint = ERROR, .len = 0 };
 
-Decode_Result decode(Slice<byte> s){
-	Decode_Result res = {};
-	byte* buf = s.raw_data();
-	isize len = s.size();
+DecodeResult decode(Slice<Byte> s){
+	DecodeResult res = {};
+	Byte* buf = s.raw_data();
+	Size len = s.len();
 
 	if(s.empty()){ return DECODE_ERROR; }
 
-	u8 first = buf[0];
+	U8 first = buf[0];
 
 	if((first & CONT) == 0){
 		res.len = 1;
@@ -117,10 +117,10 @@ Decode_Result decode(Slice<byte> s){
 	return res;
 }
 
-bool Iterator::next(rune* r, i8* len){
-	if(this->current >= this->data.size()){ return 0; }
+bool Iterator::next(Rune* r, I32* len){
+	if(this->current >= this->data.len()){ return 0; }
 
-	Decode_Result res = decode(this->data.slice_right(current));
+	DecodeResult res = decode(this->data.slice_right(current));
 	*r = res.codepoint;
 	*len = res.len;
 
@@ -133,23 +133,22 @@ bool Iterator::next(rune* r, i8* len){
 	return 1;
 }
 
-rune Iterator::next(){
-	i8 n = 0;
-	rune r;
+Rune Iterator::next(){
+	I32 n = 0;
+	Rune r;
 	if(!next(&r, &n)) return 0;
 	return r;
 }
 
-rune Iterator::prev(){
-	i8 n = 0;
-	rune r;
+Rune Iterator::prev(){
+	I32 n = 0;
+	Rune r;
 	if(!prev(&r, &n)) return 0;
 	return r;
 }
 
-// Steps iterator backward and puts rune and its length into pointers,
-// returns false when finished.
-bool Iterator::prev(rune* r, i8* len){
+
+bool Iterator::prev(Rune* r, I32* len){
 	if(this->current <= 0){ return false; }
 
 	this->current -= 1;
@@ -157,10 +156,10 @@ bool Iterator::prev(rune* r, i8* len){
 		this->current -= 1;
 	}
 
-	Decode_Result res = decode(this->data.slice_right(current));
+	DecodeResult res = decode(this->data.slice_right(current));
 	*r = res.codepoint;
 	*len = res.len;
 	return true;
 }
-} /* Namespace utf8 */
 
+} /* Namespace utf8 */
