@@ -43,7 +43,7 @@ Uintptr align_forward_ptr(Uintptr p, Uintptr a){
 	return p;
 }
 
-Uintptr align_forward_size(Size p, Size a){
+Size align_forward_size(Size p, Size a){
 	debug_assert(valid_alignment(a), "Invalid size alignment");
 	Size mod = p & (a - 1); // Fast modulo for powers of 2
 	if(mod > 0){

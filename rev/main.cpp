@@ -1,3 +1,7 @@
 #include "base.hpp"
 
-int main(){}
+int main(){
+	void* p = mem::virt::reserve(3000);
+	defer(p = 0);
+	return 0;
+}

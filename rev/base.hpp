@@ -8,7 +8,6 @@
 #include <tgmath.h>
 #include <limits.h>
 #include <float.h>
-
 #include <atomic>
 
 using I8  = int8_t;
@@ -105,6 +104,11 @@ namespace impl_defer {
 	auto make_deferred(F&& f){
 		return Deferred<F>(static_cast<F&&>(f));
 	}
+
+#define _impl_defer_concat0(X, Y) X##Y
+#define _impl_defer_concat1(X, Y) _impl_defer_concat0(X, Y)
+#define _impl_defer_concat_counter(X) _impl_defer_concat1(X, __COUNTER__)
+#define defer(Stmt) auto _impl_defer_concat_counter(_defer_) = ::impl_defer::make_deferred([&](){ do { Stmt ; } while(0); return; })
 }
 
 [[noreturn]]
@@ -193,35 +197,44 @@ void copy_no_overlap(void* dest, void const * src, Size nbytes);
 
 I32 compare(void const * a, void const * b, Size nbytes);
 
-Uintptr align_forward(Uintptr p, Uintptr a);
+Uintptr align_forward_ptr(Uintptr p, Uintptr a);
 
-Uintptr align_forward(Size p, Size a);
+Size align_forward_size(Size p, Size a);
 
 bool valid_alignment(Size a);
 
 namespace virt {
-	struct PageBlock {
-		Size reserved;
-		Size commited;
-		void* pointer;
 
-		static PageBlock make(Size nbytes);
+constexpr Size page_size = 4096;
 
-		void destroy();
+constexpr U32 protection_none    = 0;
+constexpr U32 protection_read    = (1 << 0);
+constexpr U32 protection_write   = (1 << 1);
+constexpr U32 protection_execute = (1 << 2);
 
-		void* push(Size nbytes);
+struct PageBlock {
+	Size reserved;
+	Size commited;
+	void* pointer;
 
-		void pop(Size nbytes);
-	};
+	static PageBlock make(Size nbytes);
 
+	void destroy();
 
-	void* reserve(Size nbytes);
+	void* push(Size nbytes);
 
-	void release(void* pointer);
+	void pop(Size nbytes);
+};
 
-	void* commit(void* pointer, Size nbytes);
+void* reserve(Size nbytes);
 
-	void decommit(void* pointer, Size nbytes);
+void release(void* pointer);
+
+bool protect(void* pointer, U32 prot);
+
+void* commit(void* pointer, Size nbytes);
+
+void decommit(void* pointer, Size nbytes);
 };
 
 enum struct ArenaType : U32 {
@@ -249,7 +262,6 @@ struct DecodeResult {
 
 constexpr Rune ERROR = 0xfffd;
 
-// The error rune, Byte encoded
 constexpr EncodeResult ERROR_ENCODED = {
 	.bytes = {0xef, 0xbf, 0xbd},
 	.len = 0,

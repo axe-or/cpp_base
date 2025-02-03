@@ -147,7 +147,6 @@ Rune Iterator::prev(){
 	return r;
 }
 
-
 bool Iterator::prev(Rune* r, I32* len){
 	if(this->current <= 0){ return false; }
 
@@ -161,5 +160,4 @@ bool Iterator::prev(Rune* r, I32* len){
 	*len = res.len;
 	return true;
 }
-
 } /* Namespace utf8 */
