@@ -1,7 +1,15 @@
 #include "base.hpp"
 
 int main(){
-	void* p = mem::virt::reserve(3000);
-	defer(p = 0);
+	auto arena = mem::Arena::from_virtual(20'000);
+	defer(arena.destroy());
+
+	auto nums = arena.make<F32>(400);
+	for(int i = 0; i < nums.len(); i++){
+		nums[i] = 1.0 / (i + 1);
+		printf("%.8f ", nums[i]);
+	}
+
+
 	return 0;
 }

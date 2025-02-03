@@ -217,7 +217,7 @@ struct PageBlock {
 	Size commited;
 	void* pointer;
 
-	static PageBlock make(Size nbytes);
+	static PageBlock create(Size nbytes);
 
 	void destroy();
 
@@ -228,7 +228,7 @@ struct PageBlock {
 
 void* reserve(Size nbytes);
 
-void release(void* pointer);
+void release(void* pointer, Size nbytes);
 
 bool protect(void* pointer, U32 prot);
 
@@ -238,13 +238,41 @@ void decommit(void* pointer, Size nbytes);
 };
 
 enum struct ArenaType : U32 {
-	Buffer = 0,
-	Virtual,
+	Buffer  = 0,
+	Virtual = 1,
 };
 
 struct Arena {
-	ArenaType type;
+	virt::PageBlock data;
 	Size offset;
+	Uintptr last_allocation;
+	ArenaType type;
+
+	void* alloc(Size nbytes, Size align);
+
+	void* resize_in_place(void* ptr, Size new_size);
+
+	void* realloc(void* ptr, Size old_size, Size new_size, Size align);
+
+	void reset();
+
+	void destroy();
+
+	static Arena from_buffer(Slice<U8> buf);
+
+	static Arena from_virtual(Size reserve);
+
+	template<typename T>
+	T* make(){
+		T* p = (T*)alloc(sizeof(T), alignof(T));
+		return p;
+	}
+
+	template<typename T>
+	Slice<T> make(Size elems){
+		T* p = (T*)alloc(sizeof(T) * elems, alignof(T));
+		return Slice<T>::from_pointer(p, elems);
+	}
 };
 
 };
