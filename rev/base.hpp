@@ -313,4 +313,94 @@ struct Iterator {
 };
 } /* Namespace utf8 */
 
+static inline
+Size cstring_len(char const* cstr){
+	Size size = 0;
+	for(Size i = 0; cstr[i] != 0; i += 1){
+		size += 1;
+	}
+	return size;
+}
+
+struct String {
+private:
+	Byte const * _data = nullptr;
+	Size _length = 0;
+
+public:
+	Size len() const { return _length; }
+
+	Byte const * raw_data(){ return _data; }
+
+	String slice(Size from, Size to) const {
+		bounds_check_assert(
+			from >= 0 && from < _length &&
+			to >= 0 && to <= _length &&
+			from <= to,
+			"Index to sub-string is out of bounds");
+
+		String s;
+		s._length = to - from;
+		s._data = &_data[from];
+		return s;
+	}
+
+	utf8::Iterator iterator() const;
+
+	utf8::Iterator iterator_reversed() const;
+
+	static String from_cstr(char const* data){
+		String s;
+		s._data = (Byte const*)data;
+		s._length = cstring_len(data);
+		return s;
+	}
+
+	static String from_cstr(char const* data, Size start, Size length){
+		String s;
+		s._data = (Byte const*)&data[start];
+		s._length = length;
+		return s;
+	}
+
+	static String from_bytes(Slice<Byte> buf){
+		String s;
+		s._data = buf.raw_data();
+		s._length = buf.len();
+		return s;
+	}
+
+	// Implict conversion, this is one of the very vew places an implicit
+	// conversion is made in the library, mostly to write C-strings more
+	// ergonomic.
+	String(){}
+	String(char const* s) : _data((Byte const*)s), _length(cstring_len(s)){}
+
+	Byte operator[](Size idx) const noexcept {
+		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on string");
+		return _data[idx];
+	}
+
+	bool operator==(String lhs) const noexcept {
+		if(lhs._length != _length){ return false; }
+		return mem::compare(_data, lhs._data, _length) == 0;
+	}
+
+	bool operator!=(String lhs) const noexcept {
+		if(lhs._length != _length){ return false; }
+		return mem::compare(_data, lhs._data, _length) != 0;
+	}
+};
+
+namespace strings {
+String trim(String s, String cutset);
+
+String trim_leading(String s, String cutset);
+
+String trim_trailing(String s, String cutset);
+
+Size rune_count(String s);
+}
+
+
 #endif /* Include guard */
