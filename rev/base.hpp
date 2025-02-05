@@ -345,9 +345,37 @@ public:
 		return s;
 	}
 
-	utf8::Iterator iterator() const;
+	String slice_right(Size idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-string is out of bounds");
+		String s;
+		s._length = _length - idx;
+		s._data = &_data[idx];
+		return s;
+	}
 
-	utf8::Iterator iterator_reversed() const;
+	String slice_left(Size idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-string is out of bounds");
+		String s;
+		s._length = idx;
+		s._data = _data;
+		return s;
+	}
+
+	utf8::Iterator iterator() const {
+		utf8::Iterator it = {
+			.data = Slice<Byte>::from_pointer((Byte*) _data, _length),
+			.current = 0,
+		};
+		return it;
+	}
+
+	utf8::Iterator iterator_reversed() const {
+		utf8::Iterator it = {
+			.data = Slice<Byte>::from_pointer((Byte*) _data, _length),
+			.current = _length,
+		};
+		return it;
+	}
 
 	static String from_cstr(char const* data){
 		String s;
@@ -372,7 +400,7 @@ public:
 
 	// Implict conversion, this is one of the very vew places an implicit
 	// conversion is made in the library, mostly to write C-strings more
-	// ergonomic.
+	// ergonomically.
 	String(){}
 	String(char const* s) : _data((Byte const*)s), _length(cstring_len(s)){}
 
