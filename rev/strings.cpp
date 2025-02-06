@@ -13,6 +13,20 @@ Size rune_count(String s) {
 	return size;
 }
 
+bool starts_with(String s, String prefix){
+	if(prefix.len() == 0){ return true; }
+	if(prefix.len() > s.len()){ return false; }
+	I32 cmp = mem::compare(s.raw_data(), prefix.raw_data(), prefix.len());
+	return cmp == 0;
+}
+
+bool ends_with(String s, String suffix){
+	if(suffix.len() == 0){ return true; }
+	if(suffix.len() > s.len()){ return false; }
+	I32 cmp = mem::compare(s.raw_data() + s.len() - suffix.len(), suffix.raw_data(), suffix.len());
+	return cmp == 0;
+}
+
 String trim(String s, String cutset) {
 	String trimmed = trim_trailing(trim_leading(s, cutset), cutset);
 	return trimmed;

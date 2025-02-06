@@ -263,13 +263,13 @@ struct Arena {
 	static Arena from_virtual(Size reserve);
 
 	template<typename T>
-	T* make(){
+	[[nodiscard]] T* make(){
 		T* p = (T*)alloc(sizeof(T), alignof(T));
 		return p;
 	}
 
 	template<typename T>
-	Slice<T> make(Size elems){
+	[[nodiscard]] Slice<T> make(Size elems){
 		T* p = (T*)alloc(sizeof(T) * elems, alignof(T));
 		return Slice<T>::from_pointer(p, elems);
 	}
@@ -428,6 +428,10 @@ String trim_leading(String s, String cutset);
 String trim_trailing(String s, String cutset);
 
 Size rune_count(String s);
+
+bool starts_with(String s, String prefix);
+
+bool ends_with(String s, String suffix);
 }
 
 
