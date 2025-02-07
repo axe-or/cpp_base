@@ -4,7 +4,6 @@
 #if defined(__linux__)
 	#define PLATFORM_OS_LINUX
 #elif defined(_WIN32) || defined(_WIN64)
-#define PLATFORM_OS_LINUX
 	#define PLATFORM_OS_WINDOWS
 #else
 	#error "Unsupported platform"
