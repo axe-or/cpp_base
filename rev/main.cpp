@@ -9,7 +9,9 @@ int main(){
 	append(&arr, 4);
 	append(&arr, 2);
 	append(&arr, 0);
+	auto s = slice(arr)[{2, 4}];
 	print(slice(arr));
+	print(s);
 
 	return 0;
 }

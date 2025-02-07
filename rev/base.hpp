@@ -123,69 +123,91 @@ void bounds_check_assert(bool pred, char const * msg);
 template<typename T>
 struct Slice {
 private:
-	T*   _data   = nullptr;
-	Size _length = 0;
+	T*   data   = nullptr;
+	Size length = 0;
 public:
 	T& operator[](Size idx) noexcept {
-		bounds_check_assert(idx >= 0 && idx < _length, "Index to slice is out of bounds");
-		return _data[idx];
+		bounds_check_assert(idx >= 0 && idx < length, "Index to slice is out of bounds");
+		return data[idx];
 	}
 
 	T const& operator[](Size idx) const noexcept {
-		bounds_check_assert(idx >= 0 && idx < _length, "Index to slice is out of bounds");
-		return _data[idx];
+		bounds_check_assert(idx >= 0 && idx < length, "Index to slice is out of bounds");
+		return data[idx];
 	}
 
-	// Identity function, for consistency with other contigous array types
-	Slice<T> slice(){
-		return *this;
-	}
+	Slice<T> operator[](Pair<Size> range){
+		Size from = range.a;
+		Size to = range.b;
 
-	// Get the sub-slice of elements after index (inclusive)
-	Slice<T> slice_right(Size idx){
-		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
+		bounds_check_assert(from >= 0 && from < length && to >= 0 && to <= length && from <= to, "Index to sub-slice is out of bounds");
+
 		Slice<T> s;
-		s._length = _length - idx;
-		s._data = &_data[idx];
+		s.length = to - from;
+		s.data = &data[from];
 		return s;
 	}
 
-	// Get the sub-slice of elements before index (exclusive)
-	Slice<T> slice_left(Size idx){
-		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
-		Slice<T> s;
-		s._length = idx;
-		s._data = _data;
-		return s;
-	}
+	Slice(){}
 
-	// Get the sub-slice of interval a..b (end exclusive)
-	Slice<T> slice(Size from, Size to){
-		bounds_check_assert(
-			from >= 0 && from < _length &&
-			to >= 0 && to <= _length &&
-			from <= to,
-			"Index to sub-slice is out of bounds");
-		Slice<T> s;
-		s._length = to - from;
-		s._data = &_data[from];
-		return s;
-	}
+	explicit Slice(T* data, Size len) : data{data}, length{len} {}
 
-	static Slice<T> from_pointer(T* data, Size len){
-		bounds_check_assert(len > 0, "Negative length value");
-		Slice<T> s;
-		s._data = data;
-		s._length = len;
-		return s;
-	}
-
-	Size len() const { return _length; }
-
-	T* raw_data() const { return _data; }
-
-	bool empty() const { return _length == 0 || _data == nullptr; }
+	// Accessors
+	template<typename U> friend Size len(Slice<U>);
+	template<typename U> friend U* raw_data(Slice<U>);
 };
+
+template<typename T>
+Slice<T> slice(T* data, Size len){
+	bounds_check_assert(len > 0, "Negative length value");
+	auto s = Slice<T>(data, len);
+	return s;
+}
+
+template<typename T>
+Size len(Slice<T> s){
+	return s.length;
+}
+
+template<typename T>
+T* raw_data(Slice<T> s){
+	return s.data;
+}
+
+// Get the sub-slice of interval a..b (end exclusive)
+template<typename T>
+Slice<T> slice(Slice<T> s, Size from, Size to){
+	bounds_check_assert(
+		from >= 0 && from < s.length &&
+		to >= 0 && to <= s.length &&
+		from <= to,
+		"Index to sub-slice is out of bounds");
+	Slice<T> res;
+	res.length = to - from;
+	res.data = &s.data[from];
+	return res;
+}
+
+	// // Identity function, for consistency with other contigous array types
+	// Slice<T> slice(){
+	// 	return *this;
+	// }
+
+// Get the sub-slice of elements after index (inclusive)
+template<typename T>
+Slice<T> slice_right(Slice<T> s, Size idx){
+	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
+	auto res = Slice<T>(&raw_data(s)[idx], len(s) - idx);
+	return res;
+}
+
+// Get the sub-slice of elements before index (exclusive)
+template<typename T>
+Slice<T> slice_left(Slice<T> s, Size idx){
+	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
+	auto res = Slice(s.data, idx);
+	return res;
+}
 
 constexpr Size mem_KiB = 1024ll;
 constexpr Size mem_MiB = 1024ll * 1024ll;
@@ -296,7 +318,7 @@ struct DynamicArray {
 
 template<typename T>
 Slice<T> slice(DynamicArray<T> arr){
-	return Slice<T>::from_pointer(arr.data, arr.len);
+	return slice(arr.data, arr.len);
 }
 
 template<typename T>
@@ -422,7 +444,7 @@ public:
 
 	Utf8Iterator iterator() const {
 		Utf8Iterator it = {
-			.data = Slice<Byte>::from_pointer((Byte*) _data, _length),
+			.data = ::slice((Byte*)_data, _length),
 			.current = 0,
 		};
 		return it;
@@ -430,7 +452,7 @@ public:
 
 	Utf8Iterator iterator_reversed() const {
 		Utf8Iterator it = {
-			.data = Slice<Byte>::from_pointer((Byte*) _data, _length),
+			.data = ::slice((Byte*)_data, _length),
 			.current = _length,
 		};
 		return it;
@@ -452,8 +474,8 @@ public:
 
 	static String from_bytes(Slice<Byte> buf){
 		String s;
-		s._data = buf.raw_data();
-		s._length = buf.len();
+		s._data = ::raw_data(buf);
+		s._length = ::len(buf);
 		return s;
 	}
 

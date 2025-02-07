@@ -24,35 +24,33 @@ U32 protect_flags(U8 prot){
 }
 
 void* virtual_reserve(Size nbytes){
-	nbytes = align_forward_size(nbytes, mem_page_size);
+	nbytes = mem_align_forward_size(nbytes, mem_page_size);
 	void* ptr = mmap(NULL, nbytes, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	return ptr;
 }
 
-void virtual_release(void* ptr, Size len){
+void virtual_release(void* pointer, Size nbytes){
 	debug_assert(valid_ptr_and_size(pointer, nbytes), "Pointer and allocation size must be page aligned");
-	munmap(ptr, len);
+	munmap(pointer, nbytes);
 }
 
-void* virtual_commit(void* ptr, Size len){
+void* virtual_commit(void* pointer, Size nbytes){
 	debug_assert(valid_ptr_and_size(pointer, nbytes), "Pointer and allocation size must be page aligned");
-	if(mprotect(ptr, len, PROT_READ | PROT_WRITE) < 0){
+	if(mprotect(pointer, nbytes, PROT_READ | PROT_WRITE) < 0){
 		return NULL;
 	}
-	return ptr;	
+	return pointer;	
 }
 
-void virtual_decommit(void* ptr, Size len){
+void virtual_decommit(void* pointer, Size nbytes){
 	debug_assert(valid_ptr_and_size(pointer, nbytes), "Pointer and allocation size must be page aligned");
-	mprotect(ptr, len, PROT_NONE);
-	madvise(ptr, len, MADV_FREE);
+	mprotect(pointer, nbytes, PROT_NONE);
+	madvise(pointer, nbytes, MADV_FREE);
 }
 
-bool virtual_protect(void* ptr, Size len, U8 prot){
+bool virtual_protect(void* pointer, Size nbytes, U8 prot){
 	debug_assert(valid_ptr_and_size(pointer, nbytes), "Pointer and allocation size must be page aligned");
 	U32 flags = protect_flags(prot);
-	return mprotect(ptr, len, flags) >= 0;
+	return mprotect(pointer, nbytes, flags) >= 0;
 }
-}
-
 

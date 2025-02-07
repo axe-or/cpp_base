@@ -66,10 +66,10 @@ constexpr DecodeResult DECODE_ERROR = { .codepoint = ERROR, .len = 0 };
 
 DecodeResult utf8_decode(Slice<Byte> s){
 	DecodeResult res = {};
-	Byte* buf = s.raw_data();
-	Size len = s.len();
+	Byte* buf = raw_data(s);
+	Size slen = len(s);
 
-	if(s.empty()){ return DECODE_ERROR; }
+	if(slen <= 0){ return DECODE_ERROR; }
 
 	U8 first = buf[0];
 
@@ -77,18 +77,18 @@ DecodeResult utf8_decode(Slice<Byte> s){
 		res.len = 1;
 		res.codepoint |= first;
 	}
-	else if ((first & ~MASK2) == SIZE2 && len >= 2){
+	else if ((first & ~MASK2) == SIZE2 && slen >= 2){
 		res.len = 2;
 		res.codepoint |= (buf[0] & MASK2) << 6;
 		res.codepoint |= (buf[1] & MASKX) << 0;
 	}
-	else if ((first & ~MASK3) == SIZE3 && len >= 3){
+	else if ((first & ~MASK3) == SIZE3 && slen >= 3){
 		res.len = 3;
 		res.codepoint |= (buf[0] & MASK3) << 12;
 		res.codepoint |= (buf[1] & MASKX) << 6;
 		res.codepoint |= (buf[2] & MASKX) << 0;
 	}
-	else if ((first & ~MASK4) == SIZE4 && len >= 4){
+	else if ((first & ~MASK4) == SIZE4 && slen >= 4){
 		res.len = 4;
 		res.codepoint |= (buf[0] & MASK4) << 18;
 		res.codepoint |= (buf[1] & MASKX) << 12;
@@ -116,15 +116,15 @@ DecodeResult utf8_decode(Slice<Byte> s){
 	return res;
 }
 
-bool iter_next(Utf8Iterator* it, Rune* r, I32* len){
-	if(it->current >= it->data.len()){ return 0; }
+bool iter_next(Utf8Iterator* it, Rune* r, I32* n){
+	if(it->current >= len(it->data)){ return 0; }
 
-	DecodeResult res = utf8_decode(it->data.slice_right(it->current));
+	DecodeResult res = utf8_decode(slice_right(it->data, it->current));
 	*r = res.codepoint;
-	*len = res.len;
+	*n = res.len;
 
 	if(res.codepoint == DECODE_ERROR.codepoint){
-		*len = 1;
+		*n = 1;
 	}
 
 	it->current += res.len;
@@ -140,7 +140,7 @@ bool iter_prev(Utf8Iterator* it, Rune* r, I32* len){
 		it->current -= 1;
 	}
 
-	DecodeResult res = utf8_decode(it->data.slice_right(it->current));
+	DecodeResult res = utf8_decode(slice_right(it->data, it->current));
 	*r = res.codepoint;
 	*len = res.len;
 	return true;

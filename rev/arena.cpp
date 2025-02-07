@@ -2,9 +2,9 @@
 
 Arena arena_from_buffer(Slice<U8> buf){
 	PageBlock data = {
-		.reserved = buf.len(),
-		.commited = buf.len(),
-		.pointer = buf.raw_data(),
+		.reserved = len(buf),
+		.commited = len(buf),
+		.pointer = raw_data(buf),
 	};
 
 	Arena a = {
@@ -92,7 +92,6 @@ retry:
 
 	return NULL;
 }
-
 
 void* mem_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align){
 	void* new_ptr = mem_resize_in_place(a, ptr, new_size);
