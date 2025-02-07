@@ -189,6 +189,11 @@ public:
 
 
 namespace mem {
+
+constexpr Size KiB = 1024ll;
+constexpr Size MiB = 1024ll * 1024ll;
+constexpr Size GiB = 1024ll * 1024ll * 1024ll;
+
 void set(void* p, Byte val, Size nbytes);
 
 void copy(void* dest, void const * src, Size nbytes);
@@ -250,6 +255,8 @@ struct Arena {
 
 	void* alloc(Size nbytes, Size align);
 
+	void* alloc_non_zero(Size nbytes, Size align);
+
 	void* resize_in_place(void* ptr, Size new_size);
 
 	void* realloc(void* ptr, Size old_size, Size new_size, Size align);
@@ -260,7 +267,7 @@ struct Arena {
 
 	static Arena from_buffer(Slice<U8> buf);
 
-	static Arena from_virtual(Size reserve);
+	static Arena create_virtual(Size reserve);
 
 	template<typename T>
 	[[nodiscard]] T* make(){
@@ -432,7 +439,15 @@ Size rune_count(String s);
 bool starts_with(String s, String prefix);
 
 bool ends_with(String s, String suffix);
+
+Size find(String s, String substr, Size start = 0);
+
+[[nodiscard]]
+String clone(String s, mem::Arena* arena);
 }
+
+#warning "Using debug print"
+#include "debug_print.cpp"
 
 
 #endif /* Include guard */

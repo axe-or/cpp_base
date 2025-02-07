@@ -19,7 +19,7 @@ Arena Arena::from_buffer(Slice<U8> buf){
 	return a;
 }
 
-Arena Arena::from_virtual(Size reserve){
+Arena Arena::create_virtual(Size reserve){
 	auto data = virt::PageBlock::create(reserve);
 
 	Arena a = {

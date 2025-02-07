@@ -4,6 +4,13 @@ namespace strings {
 
 constexpr Size max_cutset_len = 64;
 
+String clone(String s, mem::Arena* a){
+	auto buf = a->make<Byte>(s.len() + 1);
+	buf[buf.len() - 1] = 0;
+	mem::copy_no_overlap(buf.raw_data(), s.raw_data(), s.len());
+	return String::from_bytes(buf.slice_left(buf.len() - 1));
+}
+
 Size rune_count(String s) {
 	[[maybe_unused]] Rune r;
 	[[maybe_unused]] I32 n;
@@ -120,6 +127,21 @@ String trim_trailing(String s, String cutset) {
 	}
 
 	return s.slice_left(cut_until);
+}
+
+Size find(String s, String pattern, Size start){
+	auto source_p  = s.raw_data();
+	auto pattern_p = pattern.raw_data();
+
+	auto length = s.len() - pattern.len();
+
+	for(Size i = start; i < length; i++){
+		if(mem::compare(&source_p[i], pattern_p, pattern.len()) == 0){
+			return i;
+		}
+	}
+
+	return -1;
 }
 
 }
