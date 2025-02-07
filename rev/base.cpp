@@ -5,7 +5,7 @@
 #include "memory.cpp"
 #include "arena.cpp"
 #include "utf8.cpp"
-/* #include "strings.cpp" */
+#include "strings.cpp"
 
 #include "virtual_memory.cpp"
 #if defined(PLATFORM_OS_WINDOWS)

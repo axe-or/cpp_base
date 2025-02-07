@@ -1,45 +1,60 @@
 #include "base.hpp"
 
-namespace strings {
 constexpr Size max_cutset_len = 64;
 
-String clone(String s, mem_Arena* a){
-	auto buf = a->make<Byte>(s.len() + 1);
-	buf[buf.len() - 1] = 0;
-	mem_copy_no_overlap(buf.raw_data(), s.raw_data(), s.len());
-	return String::from_bytes(buf.slice_left(buf.len() - 1));
+Utf8Iterator str_iterator(String s) {
+	Utf8Iterator it = {
+		.data = slice(raw_data(s), len(s)),
+		.current = 0,
+	};
+	return it;
 }
 
-Size rune_count(String s) {
+Utf8Iterator str_iterator_reversed(String s) {
+	Utf8Iterator it = {
+		.data = slice(raw_data(s), len(s)),
+		.current = len(s),
+	};
+	return it;
+}
+
+String str_clone(String s, Arena* a){
+	auto buf = make<Byte>(a, len(s) + 1);
+	buf[len(buf) - 1] = 0;
+	mem_copy_no_overlap(raw_data(buf), raw_data(s), len(s));
+	return string_from_bytes(slice_left(buf, len(buf) - 1));
+}
+
+Size str_rune_count(String s) {
 	[[maybe_unused]] Rune r;
 	[[maybe_unused]] I32 n;
-	auto it = s.iterator();
+	auto it = str_iterator(s);
 	Size size = 0;
-	while(it.next(&r, &n)) { size += 1; }
+	while(iter_next(&it, &r, &n)) { size += 1; }
 	return size;
 }
 
-bool starts_with(String s, String prefix){
-	if(prefix.len() == 0){ return true; }
-	if(prefix.len() > s.len()){ return false; }
-	I32 cmp = mem_compare(s.raw_data(), prefix.raw_data(), prefix.len());
+bool str_starts_with(String s, String prefix){
+	if(len(prefix) == 0){ return true; }
+	if(len(prefix) > len(s)){ return false; }
+	I32 cmp = mem_compare(raw_data(s), raw_data(prefix), len(prefix));
 	return cmp == 0;
 }
 
-bool ends_with(String s, String suffix){
-	if(suffix.len() == 0){ return true; }
-	if(suffix.len() > s.len()){ return false; }
-	I32 cmp = mem_compare(s.raw_data() + s.len() - suffix.len(), suffix.raw_data(), suffix.len());
+bool str_ends_with(String s, String suffix){
+	if(len(suffix) == 0){ return true; }
+	if(len(suffix) > len(s)){ return false; }
+	I32 cmp = mem_compare(raw_data(s) + len(s) - len(suffix), raw_data(suffix), len(suffix));
 	return cmp == 0;
 }
 
-String trim(String s, String cutset) {
-	String trimmed = trim_trailing(trim_leading(s, cutset), cutset);
+String str_trim(String s, String cutset) {
+	String trimmed = str_trim_trailing(str_trim_leading(s, cutset), cutset);
 	return trimmed;
 }
 
-String trim_leading(String s, String cutset) {
-	debug_assert(cutset.len() <= max_cutset_len, "Cutset string exceeds max_cutset_len");
+String str_trim_leading(String s, String cutset) {
+	debug_assert(len(cutset) <= max_cutset_len, "Cutset string exceeds max_cutset_len");
 
 	Rune set[max_cutset_len] = {0};
 	Size set_len = 0;
@@ -47,10 +62,10 @@ String trim_leading(String s, String cutset) {
 
 	/* Decode cutset */ {
 		Rune c; I32 n;
-		auto iter = cutset.iterator();
+		auto it = str_iterator(cutset);
 
 		Size i = 0;
-		while(iter.next(&c, &n) && i < max_cutset_len){
+		while(iter_next(&it, &c, &n) && i < max_cutset_len){
 			set[i] = c;
 			i += 1;
 		}
@@ -59,9 +74,9 @@ String trim_leading(String s, String cutset) {
 
 	/* Strip cutset */ {
 		Rune c; I32 n;
-		auto iter = s.iterator();
+		auto it = str_iterator(s);
 
-		while(iter.next(&c, &n)){
+		while(iter_next(&it, &c, &n)){
 			bool to_be_cut = false;
 			for(Size i = 0; i < set_len; i += 1){
 				if(set[i] == c){
@@ -80,22 +95,22 @@ String trim_leading(String s, String cutset) {
 		}
 	}
 
-	return s.slice_right(cut_after);
+	return slice_right(s, cut_after);
 }
 
-String trim_trailing(String s, String cutset) {
-	debug_assert(cutset.len() <= max_cutset_len, "Cutset string exceeds max_cutset_len");
+String str_trim_trailing(String s, String cutset) {
+	debug_assert(len(cutset) <= max_cutset_len, "Cutset string exceeds max_cutset_len");
 
 	Rune set[max_cutset_len] = {0};
 	Size set_len = 0;
-	Size cut_until = s.len();
+	Size cut_until = len(s);
 
 	/* Decode cutset */ {
 		Rune c; I32 n;
-		auto iter = cutset.iterator();
+		auto it = str_iterator(cutset);
 
 		Size i = 0;
-		while(iter.next(&c, &n) && i < max_cutset_len){
+		while(iter_next(&it, &c, &n) && i < max_cutset_len){
 			set[i] = c;
 			i += 1;
 		}
@@ -104,9 +119,9 @@ String trim_trailing(String s, String cutset) {
 
 	/* Strip cutset */ {
 		Rune c; I32 n;
-		auto iter = s.iterator_reversed();
+		auto it = str_iterator_reversed(s);
 
-		while(iter.prev(&c, &n)){
+		while(iter_prev(&it, &c, &n)){
 			bool to_be_cut = false;
 			for(Size i = 0; i < set_len; i += 1){
 				if(set[i] == c){
@@ -125,26 +140,24 @@ String trim_trailing(String s, String cutset) {
 		}
 	}
 
-	return s.slice_left(cut_until);
+	return slice_left(s, cut_until);
 }
 
 Size find(String s, String pattern, Size start){
-	bounds_check_assert(start < s.len(), "Cannot begin searching after string length");
-	if(pattern.len() > s.len()){ return -1; }
-	else if(pattern.len() == 0){ return start; }
+	bounds_check_assert(start < len(s), "Cannot begin searching after string length");
+	if(len(pattern) > len(s)){ return -1; }
+	else if(len(pattern) == 0){ return start; }
 
-	auto source_p  = s.raw_data();
-	auto pattern_p = pattern.raw_data();
+	auto source_p  = raw_data(s);
+	auto pattern_p = raw_data(pattern);
 
-	auto length = s.len() - pattern.len();
+	auto length = len(s) - len(pattern);
 
 	for(Size i = start; i < length; i++){
-		if(mem_compare(&source_p[i], pattern_p, pattern.len()) == 0){
+		if(mem_compare(&source_p[i], pattern_p, len(pattern)) == 0){
 			return i;
 		}
 	}
 
 	return -1;
-}
-
 }

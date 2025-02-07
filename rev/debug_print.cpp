@@ -18,7 +18,7 @@ void print(T a, Args&& ... args){
 
 static inline
 std::ostream& operator<<(std::ostream& os, String s){
-	os.write((char const*)s.raw_data(), s.len());
+	os.write((char const*)raw_data(s), len(s));
 	return os;
 }
 

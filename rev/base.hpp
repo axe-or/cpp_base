@@ -153,8 +153,8 @@ public:
 	explicit Slice(T* data, Size len) : data{data}, length{len} {}
 
 	// Accessors
-	template<typename U> friend Size len(Slice<U>);
-	template<typename U> friend U* raw_data(Slice<U>);
+	friend Size len(Slice<T> s){ return s.length; }
+	friend T* raw_data(Slice<T> s){ return s.data; }
 };
 
 template<typename T>
@@ -162,16 +162,6 @@ Slice<T> slice(T* data, Size len){
 	bounds_check_assert(len > 0, "Negative length value");
 	auto s = Slice<T>(data, len);
 	return s;
-}
-
-template<typename T>
-Size len(Slice<T> s){
-	return s.length;
-}
-
-template<typename T>
-T* raw_data(Slice<T> s){
-	return s.data;
 }
 
 // Get the sub-slice of interval a..b (end exclusive)
@@ -188,11 +178,6 @@ Slice<T> slice(Slice<T> s, Size from, Size to){
 	return res;
 }
 
-	// // Identity function, for consistency with other contigous array types
-	// Slice<T> slice(){
-	// 	return *this;
-	// }
-
 // Get the sub-slice of elements after index (inclusive)
 template<typename T>
 Slice<T> slice_right(Slice<T> s, Size idx){
@@ -205,7 +190,7 @@ Slice<T> slice_right(Slice<T> s, Size idx){
 template<typename T>
 Slice<T> slice_left(Slice<T> s, Size idx){
 	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
-	auto res = Slice(s.data, idx);
+	auto res = Slice(raw_data(s), idx);
 	return res;
 }
 
@@ -221,11 +206,30 @@ void mem_copy_no_overlap(void* dest, void const * src, Size nbytes);
 
 I32 mem_compare(void const * a, void const * b, Size nbytes);
 
-Uintptr mem_align_forward_ptr(Uintptr p, Uintptr a);
+static inline
+bool mem_valid_alignment(Size a){
+	return ((a & (a - 1)) == 0) && (a > 0);
+}
 
-Size mem_align_forward_size(Size p, Size a);
+static inline
+Uintptr mem_align_forward_ptr(Uintptr p, Uintptr a){
+	debug_assert(mem_valid_alignment(a), "Invalid memory alignment");
+	Uintptr mod = p & (a - 1); // Fast modulo for powers of 2
+	if(mod > 0){
+		p += (a - mod);
+	}
+	return p;
+}
 
-bool mem_valid_alignment(Size a);
+static inline
+Size mem_align_forward_size(Size p, Size a){
+	debug_assert(mem_valid_alignment(a), "Invalid size alignment");
+	Size mod = p & (a - 1); // Fast modulo for powers of 2
+	if(mod > 0){
+		p += (a - mod);
+	}
+	return p;
+}
 
 constexpr Size mem_page_size = 4096;
 
@@ -294,7 +298,7 @@ T* make(Arena* a){
 template<typename T> [[nodiscard]]
 Slice<T> make(Arena* a, Size elems){
 	T* p = (T*)mem_alloc(a, sizeof(T) * elems, alignof(T));
-	return Slice<T>::from_pointer(p, elems);
+	return slice<T>(p, elems);
 }
 
 template<typename T>
@@ -383,7 +387,6 @@ DecodeResult utf8_decode(Slice<Byte> buf);
 struct Utf8Iterator {
 	Slice<Byte> data;
 	Size current;
-
 };
 
 bool iter_next(Utf8Iterator* it, Rune* r, I32* len);
@@ -409,85 +412,25 @@ private:
 	Size _length = 0;
 
 public:
-	Size len() const { return _length; }
-
-	Byte const * raw_data(){ return _data; }
-
-	String slice(Size from, Size to) const {
-		bounds_check_assert(
-			from >= 0 && from < _length &&
-			to >= 0 && to <= _length &&
-			from <= to,
-			"Index to sub-string is out of bounds");
-
-		String s;
-		s._length = to - from;
-		s._data = &_data[from];
-		return s;
-	}
-
-	String slice_right(Size idx){
-		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-string is out of bounds");
-		String s;
-		s._length = _length - idx;
-		s._data = &_data[idx];
-		return s;
-	}
-
-	String slice_left(Size idx){
-		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-string is out of bounds");
-		String s;
-		s._length = idx;
-		s._data = _data;
-		return s;
-	}
-
-	Utf8Iterator iterator() const {
-		Utf8Iterator it = {
-			.data = ::slice((Byte*)_data, _length),
-			.current = 0,
-		};
-		return it;
-	}
-
-	Utf8Iterator iterator_reversed() const {
-		Utf8Iterator it = {
-			.data = ::slice((Byte*)_data, _length),
-			.current = _length,
-		};
-		return it;
-	}
-
-	static String from_cstr(char const* data){
-		String s;
-		s._data = (Byte const*)data;
-		s._length = cstring_len(data);
-		return s;
-	}
-
-	static String from_cstr(char const* data, Size start, Size length){
-		String s;
-		s._data = (Byte const*)&data[start];
-		s._length = length;
-		return s;
-	}
-
-	static String from_bytes(Slice<Byte> buf){
-		String s;
-		s._data = ::raw_data(buf);
-		s._length = ::len(buf);
-		return s;
-	}
 
 	// Implict conversion, this is one of the very vew places an implicit
 	// conversion is made in the library, mostly to write C-strings more
 	// ergonomically.
 	String(){}
-	String(char const* s) : _data((Byte const*)s), _length(cstring_len(s)){}
+	String(const char* cs) : _data{(Byte const*)cs}, _length{cstring_len(cs)}{}
+	explicit String(Byte const* p, Size n) : _data{p}, _length{n}{}
 
 	Byte operator[](Size idx) const noexcept {
 		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on string");
 		return _data[idx];
+	}
+
+	String operator[](Pair<Size> range) const noexcept {
+		Size from = range.a;
+		Size to = range.b;
+		bounds_check_assert(from >= 0 && from < _length && to >= 0 && to <= _length && from <= to, "Index to sub-string is out of bounds");
+
+		return String(&_data[from], to - from);
 	}
 
 	bool operator==(String lhs) const noexcept {
@@ -499,7 +442,50 @@ public:
 		if(lhs._length != _length){ return false; }
 		return mem_compare(_data, lhs._data, _length) != 0;
 	}
+
+	// Accessors
+	friend Size len(String s){
+		return s._length;
+	}
+	friend Byte* raw_data(String s){
+		return (Byte*)s._data;
+	}
 };
+
+static inline
+String string_from_cstring(char const* data){
+	return String((Byte const*)data, cstring_len(data));
+}
+
+static inline
+String string_from_cstring(char const* data, Size start, Size length){
+	return String((Byte const*) &data[start], length);
+}
+
+static inline
+String string_from_bytes(Slice<Byte> buf){
+	return String(raw_data(buf), len(buf));
+}
+
+// Get the sub-slice of elements after index (inclusive)
+static inline
+String slice_right(String s, Size idx){
+	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
+	auto res = String(&raw_data(s)[idx], len(s) - idx);
+	return res;
+}
+
+// Get the sub-slice of elements before index (exclusive)
+static inline
+String slice_left(String s, Size idx){
+	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
+	auto res = String(raw_data(s), idx);
+	return res;
+}
+
+Utf8Iterator str_iterator(String s);
+
+Utf8Iterator str_iterator_reversed(String s);
 
 String str_trim(String s, String cutset);
 
@@ -520,6 +506,5 @@ String str_clone(String s, Arena* arena);
 
 #warning "Using debug print"
 #include "debug_print.cpp"
-
 
 #endif /* Include guard */
