@@ -337,7 +337,6 @@ bool pop(DynamicArray<T>& arr){
 	return true;
 }
 
-namespace utf8 {
 struct EncodeResult {
 	Byte bytes[4];
 	I32 len;
@@ -355,23 +354,23 @@ constexpr EncodeResult ERROR_ENCODED = {
 	.len = 0,
 };
 
-EncodeResult encode(Rune c);
+EncodeResult utf8_encode(Rune c);
 
 DecodeResult utf8_decode(Slice<Byte> buf);
 
-struct Iterator {
+struct Utf8Iterator {
 	Slice<Byte> data;
 	Size current;
 
-	bool next(Rune* r, I32* len);
-
-	bool prev(Rune* r, I32* len);
-
-	Rune next();
-
-	Rune prev();
 };
-} /* Namespace utf8 */
+
+bool iter_next(Utf8Iterator* it, Rune* r, I32* len);
+
+bool iter_prev(Utf8Iterator* it, Rune* r, I32* len);
+
+Rune iter_next(Utf8Iterator* it);
+
+Rune iter_prev(Utf8Iterator* it);
 
 static inline
 Size cstring_len(char const* cstr){
@@ -421,16 +420,16 @@ public:
 		return s;
 	}
 
-	utf8::Iterator iterator() const {
-		utf8::Iterator it = {
+	Utf8Iterator iterator() const {
+		Utf8Iterator it = {
 			.data = Slice<Byte>::from_pointer((Byte*) _data, _length),
 			.current = 0,
 		};
 		return it;
 	}
 
-	utf8::Iterator iterator_reversed() const {
-		utf8::Iterator it = {
+	Utf8Iterator iterator_reversed() const {
+		Utf8Iterator it = {
 			.data = Slice<Byte>::from_pointer((Byte*) _data, _length),
 			.current = _length,
 		};

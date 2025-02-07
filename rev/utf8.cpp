@@ -1,6 +1,5 @@
 #include "base.hpp"
 
-namespace utf8 {
 constexpr I32 RANGE1 = 0x7f;
 constexpr I32 RANGE2 = 0x7ff;
 constexpr I32 RANGE3 = 0xffff;
@@ -28,7 +27,7 @@ bool is_continuation_byte(Rune c){
 	return (c >= CONTINUATION1) && (c <= CONTINUATION2);
 }
 
-EncodeResult encode(Rune c){
+EncodeResult utf8_encode(Rune c){
 	EncodeResult res = {};
 
 	if(is_continuation_byte(c) ||
@@ -65,7 +64,7 @@ EncodeResult encode(Rune c){
 
 constexpr DecodeResult DECODE_ERROR = { .codepoint = ERROR, .len = 0 };
 
-DecodeResult decode(Slice<Byte> s){
+DecodeResult utf8_decode(Slice<Byte> s){
 	DecodeResult res = {};
 	Byte* buf = s.raw_data();
 	Size len = s.len();
@@ -117,10 +116,10 @@ DecodeResult decode(Slice<Byte> s){
 	return res;
 }
 
-bool Iterator::next(Rune* r, I32* len){
-	if(this->current >= this->data.len()){ return 0; }
+bool iter_next(Utf8Iterator* it, Rune* r, I32* len){
+	if(it->current >= it->data.len()){ return 0; }
 
-	DecodeResult res = decode(this->data.slice_right(current));
+	DecodeResult res = utf8_decode(it->data.slice_right(it->current));
 	*r = res.codepoint;
 	*len = res.len;
 
@@ -128,36 +127,37 @@ bool Iterator::next(Rune* r, I32* len){
 		*len = 1;
 	}
 
-	this->current += res.len;
+	it->current += res.len;
 
 	return 1;
 }
 
-Rune Iterator::next(){
-	I32 n = 0;
-	Rune r;
-	if(!next(&r, &n)) return 0;
-	return r;
-}
+bool iter_prev(Utf8Iterator* it, Rune* r, I32* len){
+	if(it->current <= 0){ return false; }
 
-Rune Iterator::prev(){
-	I32 n = 0;
-	Rune r;
-	if(!prev(&r, &n)) return 0;
-	return r;
-}
-
-bool Iterator::prev(Rune* r, I32* len){
-	if(this->current <= 0){ return false; }
-
-	this->current -= 1;
-	while(is_continuation_byte(this->data[this->current])){
-		this->current -= 1;
+	it->current -= 1;
+	while(is_continuation_byte(it->data[it->current])){
+		it->current -= 1;
 	}
 
-	DecodeResult res = decode(this->data.slice_right(current));
+	DecodeResult res = utf8_decode(it->data.slice_right(it->current));
 	*r = res.codepoint;
 	*len = res.len;
 	return true;
 }
-} /* Namespace utf8 */
+
+Rune iter_next(Utf8Iterator* it){
+	I32 n = 0;
+	Rune r;
+	if(!iter_next(it, &r, &n)) return 0;
+	return r;
+}
+
+Rune iter_prev(Utf8Iterator* it){
+	I32 n = 0;
+	Rune r;
+	if(!iter_prev(it, &r, &n)) return 0;
+	return r;
+}
+
+
