@@ -3,10 +3,10 @@
 namespace strings {
 constexpr Size max_cutset_len = 64;
 
-String clone(String s, mem::Arena* a){
+String clone(String s, mem_Arena* a){
 	auto buf = a->make<Byte>(s.len() + 1);
 	buf[buf.len() - 1] = 0;
-	mem::copy_no_overlap(buf.raw_data(), s.raw_data(), s.len());
+	mem_copy_no_overlap(buf.raw_data(), s.raw_data(), s.len());
 	return String::from_bytes(buf.slice_left(buf.len() - 1));
 }
 
@@ -22,14 +22,14 @@ Size rune_count(String s) {
 bool starts_with(String s, String prefix){
 	if(prefix.len() == 0){ return true; }
 	if(prefix.len() > s.len()){ return false; }
-	I32 cmp = mem::compare(s.raw_data(), prefix.raw_data(), prefix.len());
+	I32 cmp = mem_compare(s.raw_data(), prefix.raw_data(), prefix.len());
 	return cmp == 0;
 }
 
 bool ends_with(String s, String suffix){
 	if(suffix.len() == 0){ return true; }
 	if(suffix.len() > s.len()){ return false; }
-	I32 cmp = mem::compare(s.raw_data() + s.len() - suffix.len(), suffix.raw_data(), suffix.len());
+	I32 cmp = mem_compare(s.raw_data() + s.len() - suffix.len(), suffix.raw_data(), suffix.len());
 	return cmp == 0;
 }
 
@@ -139,7 +139,7 @@ Size find(String s, String pattern, Size start){
 	auto length = s.len() - pattern.len();
 
 	for(Size i = start; i < length; i++){
-		if(mem::compare(&source_p[i], pattern_p, pattern.len()) == 0){
+		if(mem_compare(&source_p[i], pattern_p, pattern.len()) == 0){
 			return i;
 		}
 	}

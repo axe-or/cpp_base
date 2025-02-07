@@ -187,60 +187,54 @@ public:
 	bool empty() const { return _length == 0 || _data == nullptr; }
 };
 
+constexpr Size mem_KiB = 1024ll;
+constexpr Size mem_MiB = 1024ll * 1024ll;
+constexpr Size mem_GiB = 1024ll * 1024ll * 1024ll;
 
-namespace mem {
+void mem_set(void* p, Byte val, Size nbytes);
 
-constexpr Size KiB = 1024ll;
-constexpr Size MiB = 1024ll * 1024ll;
-constexpr Size GiB = 1024ll * 1024ll * 1024ll;
+void mem_copy(void* dest, void const * src, Size nbytes);
 
-void set(void* p, Byte val, Size nbytes);
+void mem_copy_no_overlap(void* dest, void const * src, Size nbytes);
 
-void copy(void* dest, void const * src, Size nbytes);
+I32 mem_compare(void const * a, void const * b, Size nbytes);
 
-void copy_no_overlap(void* dest, void const * src, Size nbytes);
+Uintptr mem_align_forward_ptr(Uintptr p, Uintptr a);
 
-I32 compare(void const * a, void const * b, Size nbytes);
+Size mem_align_forward_size(Size p, Size a);
 
-Uintptr align_forward_ptr(Uintptr p, Uintptr a);
+bool mem_valid_alignment(Size a);
 
-Size align_forward_size(Size p, Size a);
+constexpr Size mem_page_size = 4096;
 
-bool valid_alignment(Size a);
-
-namespace virt {
-
-constexpr Size page_size = 4096;
-
-constexpr U32 protection_none    = 0;
-constexpr U32 protection_read    = (1 << 0);
-constexpr U32 protection_write   = (1 << 1);
-constexpr U32 protection_execute = (1 << 2);
+constexpr U32 mem_protection_none    = 0;
+constexpr U32 mem_protection_read    = (1 << 0);
+constexpr U32 mem_protection_write   = (1 << 1);
+constexpr U32 mem_protection_execute = (1 << 2);
 
 struct PageBlock {
 	Size reserved;
 	Size commited;
 	void* pointer;
-
-	static PageBlock create(Size nbytes);
-
-	void destroy();
-
-	void* push(Size nbytes);
-
-	void pop(Size nbytes);
 };
 
-void* reserve(Size nbytes);
+PageBlock page_block_create(Size nbytes);
 
-void release(void* pointer, Size nbytes);
+void page_block_destroy(PageBlock* blk);
 
-bool protect(void* pointer, U32 prot);
+void* page_block_push(PageBlock* blk, Size nbytes);
 
-void* commit(void* pointer, Size nbytes);
+void page_block_pop(PageBlock* blk, Size nbytes);
 
-void decommit(void* pointer, Size nbytes);
-};
+void* virtual_reserve(Size nbytes);
+
+void virtual_release(void* pointer, Size nbytes);
+
+bool virtual_protect(void* pointer, U32 prot);
+
+void* virtual_commit(void* pointer, Size nbytes);
+
+void virtual_decommit(void* pointer, Size nbytes);
 
 enum struct ArenaType : U32 {
 	Buffer  = 0,
@@ -248,38 +242,39 @@ enum struct ArenaType : U32 {
 };
 
 struct Arena {
-	virt::PageBlock data;
+	PageBlock data;
 	Size offset;
 	Uintptr last_allocation;
 	ArenaType type;
 
-	void* alloc(Size nbytes, Size align);
-
-	void* resize_in_place(void* ptr, Size new_size);
-
-	void* realloc(void* ptr, Size old_size, Size new_size, Size align);
-
-	void reset();
-
-	void destroy();
-
-	static Arena from_buffer(Slice<U8> buf);
-
-	static Arena create_virtual(Size reserve);
-
-	template<typename T>
-	[[nodiscard]] T* make(){
-		T* p = (T*)alloc(sizeof(T), alignof(T));
-		return p;
-	}
-
-	template<typename T>
-	[[nodiscard]] Slice<T> make(Size elems){
-		T* p = (T*)alloc(sizeof(T) * elems, alignof(T));
-		return Slice<T>::from_pointer(p, elems);
-	}
 };
-};
+
+Arena arena_from_buffer(Slice<U8> buf);
+
+Arena arena_create_virtual(Size reserve);
+
+void arena_destroy(Arena* a);
+
+void* mem_alloc(Arena* a, Size nbytes, Size align);
+
+void* mem_resize_in_place(Arena* a, void* ptr, Size new_size);
+
+void* mem_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align);
+
+void mem_free_all(Arena* a);
+
+template<typename T> [[nodiscard]]
+T* make(Arena* a){
+	T* p = (T*)mem_alloc(a, sizeof(T), alignof(T));
+	return p;
+}
+
+template<typename T> [[nodiscard]]
+Slice<T> make(Arena* a, Size elems){
+	T* p = (T*)mem_alloc(a, sizeof(T) * elems, alignof(T));
+	return Slice<T>::from_pointer(p, elems);
+}
+
 
 template<typename T>
 struct DynamicArray {
@@ -287,7 +282,7 @@ private:
 	T*   data;
 	Size capacity;
 	Size length;
-	mem::Arena* arena;
+	Arena* arena;
 
 public:
 	Size cap() const { return capacity; }
@@ -478,22 +473,22 @@ public:
 };
 
 namespace strings {
-String trim(String s, String cutset);
+String str_trim(String s, String cutset);
 
-String trim_leading(String s, String cutset);
+String str_trim_leading(String s, String cutset);
 
-String trim_trailing(String s, String cutset);
+String str_trim_trailing(String s, String cutset);
 
-Size rune_count(String s);
+Size str_rune_count(String s);
 
-bool starts_with(String s, String prefix);
+bool str_starts_with(String s, String prefix);
 
-bool ends_with(String s, String suffix);
+bool str_ends_with(String s, String suffix);
 
-Size find(String s, String substr, Size start = 0);
+Size str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
-String clone(String s, mem::Arena* arena);
+String str_clone(String s, mem::Arena* arena);
 }
 
 #warning "Using debug print"

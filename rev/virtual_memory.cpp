@@ -1,10 +1,8 @@
 #include "base.hpp"
 
-namespace mem::virt {
-
-PageBlock PageBlock::create(Size nbytes){
-	nbytes = align_forward_size(nbytes, page_size);
-	void* ptr = reserve(nbytes);
+PageBlock page_block_create(Size nbytes){
+	nbytes = mem_align_forward_size(nbytes, mem_page_size);
+	void* ptr = virtual_reserve(nbytes);
 	PageBlock blk = {
 		.reserved = (ptr != nullptr) ? nbytes : 0,
 		.commited = 0,
@@ -13,32 +11,31 @@ PageBlock PageBlock::create(Size nbytes){
 	return blk;
 }
 
-void PageBlock::destroy(){
-	release(pointer, reserved);
+void page_block_destroy(PageBlock* b){
+	virtual_release(b->pointer, b->reserved);
 }
 
-void* PageBlock::push(Size nbytes){
-	nbytes = align_forward_size(nbytes, page_size);
-	U8* old_ptr = (U8*)pointer + commited;
-	void* new_ptr = commit(old_ptr, nbytes);
+void* page_block_push(PageBlock* b, Size nbytes){
+	nbytes = mem_align_forward_size(nbytes, mem_page_size);
+	U8* old_ptr = (U8*)b->pointer + b->commited;
+	void* new_ptr = virtual_commit(old_ptr, nbytes);
 
 	if(new_ptr == nullptr){
 		return nullptr; /* Memory error */
 	}
-	commited += nbytes;
+	b->commited += nbytes;
 	return old_ptr;
 }
 
-void PageBlock::pop(Size nbytes){
-	nbytes = clamp<Size>(0, nbytes, commited);
+void page_block_pop(PageBlock* b, Size nbytes){
+	nbytes = clamp<Size>(0, nbytes, b->commited);
 
-	Uintptr base = (Uintptr)pointer;
+	Uintptr base = (Uintptr)b->pointer;
 	// Free pages *after* this location
-	Uintptr free_after = base + (commited - nbytes);
-	free_after = align_forward_ptr(free_after, page_size);
+	Uintptr free_after = base + (b->commited - nbytes);
+	free_after = mem_align_forward_ptr(free_after, mem_page_size);
 
-	Size amount_to_free = (base + commited) - free_after;
-	decommit((void*)free_after, amount_to_free);
-	commited -= amount_to_free;
-}
+	Size amount_to_free = (base + b->commited) - free_after;
+	virtual_decommit((void*)free_after, amount_to_free);
+	b->commited -= amount_to_free;
 }
