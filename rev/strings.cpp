@@ -130,10 +130,14 @@ String trim_trailing(String s, String cutset) {
 }
 
 Size find(String s, String pattern, Size start){
+	if(pattern.len() > s.len()){ return -1; }
+	else if(pattern.len() == 0){ return 0; }
+
 	auto source_p  = s.raw_data();
 	auto pattern_p = pattern.raw_data();
 
 	auto length = s.len() - pattern.len();
+
 
 	for(Size i = start; i < length; i++){
 		if(mem::compare(&source_p[i], pattern_p, pattern.len()) == 0){
