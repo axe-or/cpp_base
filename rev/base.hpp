@@ -275,59 +275,67 @@ Slice<T> make(Arena* a, Size elems){
 	return Slice<T>::from_pointer(p, elems);
 }
 
-
 template<typename T>
 struct DynamicArray {
-private:
-	T*   data;
-	Size capacity;
-	Size length;
+	T*     data;
+	Size   cap;
+	Size   len;
 	Arena* arena;
 
-public:
-	Size cap() const { return capacity; }
-
-	Size len() const { return length; }
-
-	T* raw_data() const { return data; }
-
-	mem::Arena* allocator() const { return arena; }
-
-	bool push(T elem){
-		[[unlikely]] if(length >= capacity){
-			Size new_cap = mem::align_forward_size(16, length * 2);
-			auto new_data = (T*)arena->realloc(data, length * sizeof(T), new_cap, alignof(T));
-			if(new_data == nullptr){
-				return false;
-			}
-			data = new_data;
-		}
-
-		data[length] = elem;
-		length += 1;
-		return true;
+	T& operator[](Size idx){
+		bounds_check_assert(idx >= 0 && idx < len, "Out of bounds access to dynamic array");
+		return data[idx];
 	}
 
-	bool pop(){
-		if(length <= 0){ return false; }
-		length -= 1;
-		return true;
-	}
-
-	Slice<T> slice(){
-		return Slice<T>::from_pointer(data, length);
-	}
-
-	static auto create(mem::Arena* arena, Size initial_cap = 16){
-		DynamicArray<T> arr;
-		arr.capacity = 16;
-		arr.length = 0;
-		arr.arena = arena;
-		arr.data = (T*)arena->alloc(initial_cap * sizeof(T), alignof(T));
-		return arr;
+	T const& operator[](Size idx) const{
+		bounds_check_assert(idx >= 0 && idx < len, "Out of bounds access to dynamic array");
+		return data[idx];
 	}
 };
 
+
+template<typename T>
+Slice<T> slice(DynamicArray<T> arr){
+	return Slice<T>::from_pointer(arr.data, arr.len);
+}
+
+template<typename T>
+DynamicArray<T> dynamic_array_create(Arena* arena, Size initial_cap = 16){
+	DynamicArray<T> arr;
+	arr.cap = initial_cap;
+	arr.len = 0;
+	arr.arena = arena;
+	arr.data = (T*)mem_alloc(arena, initial_cap * sizeof(T), alignof(T));
+	return arr;
+}
+
+template<typename T, typename U = T>
+bool append(DynamicArray<T>* arr, U elem){
+	[[unlikely]] if(arr->len >= arr->cap){
+		Size new_cap = mem_align_forward_size(16, arr->len * 2);
+		auto new_data = (T*)mem_realloc(
+				arr->arena,
+				arr->data,
+				arr->cap * sizeof(T),
+				new_cap, alignof(T));
+
+		if(new_data == nullptr){
+			return false;
+		}
+		arr->data = new_data;
+	}
+
+	arr->data[arr->len] = T(elem);
+	arr->len += 1;
+	return true;
+}
+
+template<typename T>
+bool pop(DynamicArray<T>& arr){
+	if(arr.len <= 0){ return false; }
+	arr->len -= 1;
+	return true;
+}
 
 namespace utf8 {
 struct EncodeResult {
@@ -463,16 +471,15 @@ public:
 
 	bool operator==(String lhs) const noexcept {
 		if(lhs._length != _length){ return false; }
-		return mem::compare(_data, lhs._data, _length) == 0;
+		return mem_compare(_data, lhs._data, _length) == 0;
 	}
 
 	bool operator!=(String lhs) const noexcept {
 		if(lhs._length != _length){ return false; }
-		return mem::compare(_data, lhs._data, _length) != 0;
+		return mem_compare(_data, lhs._data, _length) != 0;
 	}
 };
 
-namespace strings {
 String str_trim(String s, String cutset);
 
 String str_trim_leading(String s, String cutset);
@@ -488,8 +495,7 @@ bool str_ends_with(String s, String suffix);
 Size str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
-String str_clone(String s, mem::Arena* arena);
-}
+String str_clone(String s, Arena* arena);
 
 #warning "Using debug print"
 #include "debug_print.cpp"

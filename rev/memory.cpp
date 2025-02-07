@@ -13,7 +13,7 @@
 #define mem_compare_impl         __builtin_memcmp
 #endif
 
-bool mem_mem_valid_alignment(Size a){
+bool mem_valid_alignment(Size a){
 	return ((a & (a - 1)) == 0) && (a > 0);
 }
 
