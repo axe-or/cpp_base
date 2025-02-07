@@ -22,4 +22,16 @@ std::ostream& operator<<(std::ostream& os, String s){
 	return os;
 }
 
+
+template<typename T>
+std::ostream& operator<<(std::ostream& os, Slice<T> s){
+	os << '[';
+	for(Size i = 0; i < s.len(); i++){
+		if(i > 0) os << ' ';
+		os << s[i];
+	}
+	os << ']';
+	return os;
+}
+
 #endif /* Include guard */

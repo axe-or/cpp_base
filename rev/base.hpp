@@ -255,8 +255,6 @@ struct Arena {
 
 	void* alloc(Size nbytes, Size align);
 
-	void* alloc_non_zero(Size nbytes, Size align);
-
 	void* resize_in_place(void* ptr, Size new_size);
 
 	void* realloc(void* ptr, Size old_size, Size new_size, Size align);
@@ -281,8 +279,60 @@ struct Arena {
 		return Slice<T>::from_pointer(p, elems);
 	}
 };
-
 };
+
+template<typename T>
+struct DynamicArray {
+private:
+	T*   data;
+	Size capacity;
+	Size length;
+	mem::Arena* arena;
+
+public:
+	Size cap() const { return capacity; }
+
+	Size len() const { return length; }
+
+	T* raw_data() const { return data; }
+
+	mem::Arena* allocator() const { return arena; }
+
+	bool push(T elem){
+		[[unlikely]] if(length >= capacity){
+			Size new_cap = mem::align_forward_size(16, length * 2);
+			auto new_data = (T*)arena->realloc(data, length * sizeof(T), new_cap, alignof(T));
+			if(new_data == nullptr){
+				return false;
+			}
+			data = new_data;
+		}
+
+		data[length] = elem;
+		length += 1;
+		return true;
+	}
+
+	bool pop(){
+		if(length <= 0){ return false; }
+		length -= 1;
+		return true;
+	}
+
+	Slice<T> slice(){
+		return Slice<T>::from_pointer(data, length);
+	}
+
+	static auto create(mem::Arena* arena, Size initial_cap = 16){
+		DynamicArray<T> arr;
+		arr.capacity = 16;
+		arr.length = 0;
+		arr.arena = arena;
+		arr.data = (T*)arena->alloc(initial_cap * sizeof(T), alignof(T));
+		return arr;
+	}
+};
+
 
 namespace utf8 {
 struct EncodeResult {
