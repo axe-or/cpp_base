@@ -1,6 +1,5 @@
 #include "base.hpp"
 
-namespace mem {
 #if !defined(__clang__) && !defined(__GNUC__)
 #include <string.h>
 #define mem_set_impl             memset
@@ -14,39 +13,39 @@ namespace mem {
 #define mem_compare_impl         __builtin_memcmp
 #endif
 
-void set(void* p, byte val, isize nbytes){
-	mem_set_impl(p, val, nbytes);
+void* mem_alloc(Allocator a, Size nbytes, Size align){
+	return a.func(a.data, AllocatorOp::Alloc, nullptr, 0, nbytes, align, nullptr);
 }
 
-void copy(void* dest, void const * src, isize nbytes){
-	mem_copy_impl(dest, src, nbytes);
+void* mem_resize(Allocator a, void* ptr, Size new_size){
+	return a.func(a.data, AllocatorOp::Resize, ptr, 0, new_size, 0, nullptr);
 }
 
-void copy_no_overlap(void* dest, void const * src, isize nbytes){
-	mem_copy_no_overlap_impl(dest, src, nbytes);
+void* mem_realloc(Allocator a, void* ptr, Size old_size, Size new_size, Size align){
+	return a.func(a.data, AllocatorOp::Realloc, ptr, old_size, new_size, align, nullptr);
 }
 
-i32 compare(void const * a, void const * b, isize nbytes){
-	return mem_compare_impl(a, b, nbytes);
+void mem_free(Allocator a, void* ptr, Size old_size){
+	a.func(a.data, AllocatorOp::Realloc, ptr, old_size, 0, 0, nullptr);
 }
 
-uintptr align_forward_ptr(uintptr p, uintptr a){
-	debug_assert(valid_alignment(a), "Invalid memory alignment");
-	uintptr mod = p & (a - 1); // Fast modulo for powers of 2
-	if(mod > 0){
-		p += (a - mod);
-	}
-	return p;
+void mem_free_all(Allocator a){
+	a.func(a.data, AllocatorOp::FreeAll, 0, 0, 0, 0, nullptr);
 }
 
-uintptr align_forward_size(isize p, isize a){
-	debug_assert(valid_alignment(a), "Invalid size alignment");
-	isize mod = p & (a - 1); // Fast modulo for powers of 2
-	if(mod > 0){
-		p += (a - mod);
-	}
-	return p;
+void mem_set(void* p, Byte val, Size count){
+	mem_set_impl(p, val, count);
 }
 
-} /* Namespace mem */
+void mem_copy(void* dest, void const * src, Size count){
+	mem_copy_impl(dest, src, count);
+}
+
+void mem_copy_no_overlap(void* dest, void const * src, Size count){
+	mem_copy_no_overlap_impl(dest, src, count);
+}
+
+I32 mem_compare(void const * a, void const * b, Size count){
+	return mem_compare_impl(a, b, count);
+}
 

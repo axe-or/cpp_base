@@ -1,105 +1,165 @@
 #include "base.hpp"
 
-namespace mem {
-static
-uintptr arena_required_mem(uintptr cur, isize nbytes, isize align){
-	debug_assert(valid_alignment(align), "Alignment must be a power of 2");
-	uintptr_t aligned  = align_forward_ptr(cur, align);
-	uintptr_t padding  = (uintptr)(aligned - cur);
-	uintptr_t required = padding + nbytes;
-	return required;
-}
-
-void* Arena::alloc(isize size, isize align){
-	uintptr base = (uintptr)data;
-	uintptr current = (uintptr)base + (uintptr)offset;
-
-	uintptr available = (uintptr)capacity - (current - base);
-	uintptr required = arena_required_mem(current, size, align);
-
-	if(required > available){
-		return nullptr;
-	}
-
-	offset += required;
-	void* allocation = &data[offset - size];
-	last_allocation = (uintptr)allocation;
-	return allocation;
-}
-
-void Arena::free_all(){
-	offset = 0;
-}
-
-void* Arena::resize(void* ptr, isize new_size){
-	if((uintptr)ptr == last_allocation){
-		uintptr base = (uintptr)data;
-		uintptr current = base + (uintptr)offset;
-		uintptr limit = base + (uintptr)capacity;
-		isize last_allocation_size = current - last_allocation;
-
-		if((current - last_allocation_size + new_size) > limit){
-			return nullptr; /* No space left*/
-		}
-
-		offset += new_size - last_allocation_size;
-		return ptr;
-	}
-
-	return nullptr;
-}
-
 static
 void* arena_allocator_func(
 	void* impl,
-	Allocator_Op op,
+	AllocatorOp op,
 	void* old_ptr,
-	isize size,
-	isize align,
-	u32* capabilities)
-{
+	Size old_size,
+	Size size,
+	Size align,
+	U32* capabilities
+){
+
 	auto arena = (Arena*)impl;
-	(void)old_ptr;
-	using M = Allocator_Op;
-	using C = Allocator_Capability;
+	using M = AllocatorOp;
+	using C = AllocatorCapability;
 
-	switch(op){
-		case M::Alloc: {
-			return arena->alloc(size, align);
-		} break;
+	switch (op) {
+	case M::Query:
+		*capabilities = U32(C::AlignAny) | U32(C::AllocAny) | U32(C::FreeAll) | ((arena->type == ArenaType::Virtual) ? U32(C::Virtual) : 0);
+		return nullptr;
 
-		case M::Free_All: {
-			arena->free_all();
-		} break;
+	case M::Alloc:
+		return arena_alloc(arena, size, align);
 
-		case M::Resize: {
-			return arena->resize(old_ptr, size);
-		} break;
+	case M::Resize:
+		return arena_resize_in_place(arena, old_ptr, size);
 
-		case M::Free: {} break;
+	case M::Free:
+		return nullptr;
 
-		case M::Query: {
-			*capabilities = u32(C::Align_Any) | u32(C::Free_All) | u32(C::Alloc_Any) | u32(C::Resize);
-		} break;
+	case M::FreeAll:
+		arena_free_all(arena);
+		return nullptr;
+
+	case M::Realloc:
+		return arena_realloc(arena, old_ptr, old_size, size, align);
 	}
 
 	return nullptr;
 }
 
-Allocator Arena::allocator(){
-	Allocator allocator = {
-		._impl = this,
-		._func = arena_allocator_func,
+Allocator arena_allocator(Arena* arena){
+	Allocator alloc = {
+		.data = arena,
+		.func = arena_allocator_func,
 	};
-	return allocator;
+	return alloc;
 }
 
-void arena_init(Arena* a, byte* data, isize len){
-	a->capacity = len;
-	a->data = data;
+Arena arena_from_buffer(Slice<U8> buf){
+	PageBlock data = {
+		.reserved = len(buf),
+		.commited = len(buf),
+		.pointer = raw_data(buf),
+	};
+
+	Arena a = {
+		.data = data,
+		.offset = 0,
+		.last_allocation = 0,
+		.type = ArenaType::Buffer,
+	};
+
+	return a;
+}
+
+Arena arena_create_virtual(Size reserve){
+	auto data = page_block_create(reserve);
+
+	Arena a = {
+		.data = data,
+		.offset = 0,
+		.last_allocation = 0,
+		.type = ArenaType::Virtual,
+	};
+
+	return a;
+}
+
+static
+Uintptr arena_required_mem(Uintptr cur, Size count, Size align){
+	ensure(mem_valid_alignment(align), "Alignment must be a power of 2");
+	Uintptr aligned  = mem_align_forward_ptr(cur, align);
+	Uintptr padding  = (Uintptr)(aligned - cur);
+	Uintptr required = padding + count;
+	return required;
+}
+
+void* arena_alloc(Arena* a, Size size, Size align){
+retry:
+	Uintptr base = (Uintptr)a->data.pointer;
+	Uintptr current = (Uintptr)base + (Uintptr)a->offset;
+
+	Size available = a->data.commited - (current - base);
+	Size required  = arena_required_mem(current, size, align);
+
+	[[unlikely]] if(required > available){
+		Size in_reserve = a->data.reserved - a->data.commited;
+		Size diff = required - available;
+		if(diff > in_reserve){
+			return NULL; /* Out of memory */
+		}
+		else if(a->type == ArenaType::Virtual){
+			if(page_block_push(&a->data, required) == NULL){
+				return NULL; /* Out of memory */
+			}
+			goto retry;
+		}
+	}
+
+	a->offset += required;
+	void* allocation = (U8*)a->data.pointer + (a->offset - size);
+	a->last_allocation = (Uintptr)allocation;
+	return allocation;
+}
+
+void* arena_resize_in_place(Arena* a, void* ptr, Size new_size){
+retry:
+	if((Uintptr)ptr == a->last_allocation){
+		Uintptr base    = Uintptr(a->data.pointer);
+		Uintptr current = base + Uintptr(a->offset);
+		Uintptr limit   = base + Uintptr(a->data.commited);
+
+		Size last_allocation_size = current - a->last_allocation;
+		if((current - last_allocation_size + new_size) > limit){
+			if(a->type == ArenaType::Virtual){
+				Size to_commit = (current - last_allocation_size + new_size) - limit;
+				if(page_block_push(&a->data, to_commit) != NULL){
+					goto retry;
+				}
+			}
+
+			return NULL; /* No space left*/
+		}
+
+		a->offset += new_size - last_allocation_size;
+		return ptr;
+	}
+
+	return NULL;
+}
+
+void* arena_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align){
+	void* new_ptr = arena_resize_in_place(a, ptr, new_size);
+	if(new_ptr == NULL){
+		new_ptr = arena_alloc(a, new_size, align);
+		if(new_ptr != NULL){
+			mem_copy_no_overlap(new_ptr, ptr, min(old_size, new_size));
+		}
+	}
+	return new_ptr;
+}
+
+void arena_free_all(Arena* a){
 	a->offset = 0;
 }
 
-
-} /* Namespace mem */
+void arena_destroy(Arena* a){
+	arena_free_all(a);
+	if(a->type == ArenaType::Virtual){
+		page_block_destroy(&a->data);
+	}
+}
 

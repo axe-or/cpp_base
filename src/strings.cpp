@@ -1,71 +1,84 @@
 #include "base.hpp"
 
-isize String::rune_count() const {
-	[[maybe_unused]] rune r;
-	[[maybe_unused]] i8 n;
-	auto it = iterator();
-	isize size = 0;
-	while(it.next(&r, &n)) { size += 1; }
+constexpr Size max_cutset_len = 64;
+
+Utf8Iterator str_iterator(String s) {
+	Utf8Iterator it = {
+		.data = slice(raw_data(s), len(s)),
+		.current = 0,
+	};
+	return it;
+}
+
+Utf8Iterator str_iterator_reversed(String s) {
+	Utf8Iterator it = {
+		.data = slice(raw_data(s), len(s)),
+		.current = len(s),
+	};
+	return it;
+}
+
+String str_clone(String s, Allocator a){
+	auto buf = make<Byte>(a, len(s) + 1);
+	buf[len(buf) - 1] = 0;
+	mem_copy_no_overlap(raw_data(buf), raw_data(s), len(s));
+	return string_from_bytes(slice_left(buf, len(buf) - 1));
+}
+
+Size str_rune_count(String s) {
+	[[maybe_unused]] Rune r;
+	[[maybe_unused]] I32 n;
+	auto it = str_iterator(s);
+	Size size = 0;
+	while(iter_next(&it, &r, &n)) { size += 1; }
 	return size;
 }
 
-String String::sub(isize from, isize to) const {
-	bounds_check_assert(from <= to, "Improper slicing range");
-	bounds_check_assert(from >= 0 && from <= _length, "Index to sub-string is out of bounds");
-	bounds_check_assert(to >= 0 && to <= _length, "Index to sub-string is out of bounds");
-	String s;
-	s._length = to - from;
-	s._data = &_data[from];
-	return s;
+bool str_starts_with(String s, String prefix){
+	if(len(prefix) == 0){ return true; }
+	if(len(prefix) > len(s)){ return false; }
+	I32 cmp = mem_compare(raw_data(s), raw_data(prefix), len(prefix));
+	return cmp == 0;
 }
 
-constexpr isize MAX_CUTSET_LEN = 128;
+bool str_ends_with(String s, String suffix){
+	if(len(suffix) == 0){ return true; }
+	if(len(suffix) > len(s)){ return false; }
+	I32 cmp = mem_compare(raw_data(s) + len(s) - len(suffix), raw_data(suffix), len(suffix));
+	return cmp == 0;
+}
 
-String String::trim(String cutset) const {
-	String trimmed = this->trim_leading(cutset).trim_trailing(cutset);
+String str_trim(String s, String cutset) {
+	String trimmed = str_trim_trailing(str_trim_leading(s, cutset), cutset);
 	return trimmed;
 }
 
-utf8::Iterator String::iterator() const {
-	return {
-		.data = Slice<byte>::from_pointer((byte*)_data, _length),
-		.current = 0,
-	};
-}
+String str_trim_leading(String s, String cutset) {
+	debug_assert(len(cutset) <= max_cutset_len, "Cutset string exceeds max_cutset_len");
 
-utf8::Iterator String::iterator_reversed() const {
-	return {
-		.data = Slice<byte>::from_pointer((byte*)_data, _length),
-		.current = _length,
-	};
-}
+	Rune set[max_cutset_len] = {0};
+	Size set_len = 0;
+	Size cut_after = 0;
 
-String String::trim_leading(String cutset) const {
-	debug_assert(cutset.size() <= MAX_CUTSET_LEN, "Cutset string exceeds MAX_CUTSET_LEN");
+	/* Decode cutset */ {
+		Rune c; I32 n;
+		auto it = str_iterator(cutset);
 
-	rune set[MAX_CUTSET_LEN] = {0};
-	isize set_len = 0;
-	isize cut_after = 0;
-
-	decode_cutset: {
-		rune c; i8 n;
-		auto iter = cutset.iterator();
-
-		isize i = 0;
-		while(iter.next(&c, &n) && i < MAX_CUTSET_LEN){
+		Size i = 0;
+		while(iter_next(&it, &c, &n) && i < max_cutset_len){
 			set[i] = c;
 			i += 1;
 		}
 		set_len = i;
 	}
 
-	strip_cutset: {
-		rune c; i8 n;
-		auto iter = this->iterator();
+	/* Strip cutset */ {
+		Rune c; I32 n;
+		auto it = str_iterator(s);
 
-		while(iter.next(&c, &n)){
+		while(iter_next(&it, &c, &n)){
 			bool to_be_cut = false;
-			for(isize i = 0; i < set_len; i += 1){
+			for(Size i = 0; i < set_len; i += 1){
 				if(set[i] == c){
 					to_be_cut = true;
 					break;
@@ -76,41 +89,41 @@ String String::trim_leading(String cutset) const {
 				cut_after += n;
 			}
 			else {
-				break; // Reached first rune that isn't in cutset
+				break; // Reached first Rune that isn't in cutset
 			}
 
 		}
 	}
 
-	return this->sub(cut_after, _length);
+	return slice_right(s, cut_after);
 }
 
-String String::trim_trailing(String cutset) const {
-	debug_assert(cutset.size() <= MAX_CUTSET_LEN, "Cutset string exceeds MAX_CUTSET_LEN");
+String str_trim_trailing(String s, String cutset) {
+	debug_assert(len(cutset) <= max_cutset_len, "Cutset string exceeds max_cutset_len");
 
-	rune set[MAX_CUTSET_LEN] = {0};
-	isize set_len = 0;
-	isize cut_until = _length;
+	Rune set[max_cutset_len] = {0};
+	Size set_len = 0;
+	Size cut_until = len(s);
 
-	decode_cutset: {
-		rune c; i8 n;
-		auto iter = cutset.iterator();
+	/* Decode cutset */ {
+		Rune c; I32 n;
+		auto it = str_iterator(cutset);
 
-		isize i = 0;
-		while(iter.next(&c, &n) && i < MAX_CUTSET_LEN){
+		Size i = 0;
+		while(iter_next(&it, &c, &n) && i < max_cutset_len){
 			set[i] = c;
 			i += 1;
 		}
 		set_len = i;
 	}
 
-	strip_cutset: {
-		rune c; i8 n;
-		auto iter = this->iterator_reversed();
+	/* Strip cutset */ {
+		Rune c; I32 n;
+		auto it = str_iterator_reversed(s);
 
-		while(iter.prev(&c, &n)){
+		while(iter_prev(&it, &c, &n)){
 			bool to_be_cut = false;
-			for(isize i = 0; i < set_len; i += 1){
+			for(Size i = 0; i < set_len; i += 1){
 				if(set[i] == c){
 					to_be_cut = true;
 					break;
@@ -121,14 +134,30 @@ String String::trim_trailing(String cutset) const {
 				cut_until -= n;
 			}
 			else {
-				break; // Reached first rune that isn't in cutset
+				break; // Reached first Rune that isn't in cutset
 			}
 
 		}
 	}
 
-	return this->sub(0, cut_until);
+	return slice_left(s, cut_until);
 }
 
+Size find(String s, String pattern, Size start){
+	bounds_check_assert(start < len(s), "Cannot begin searching after string length");
+	if(len(pattern) > len(s)){ return -1; }
+	else if(len(pattern) == 0){ return start; }
 
+	auto source_p  = raw_data(s);
+	auto pattern_p = raw_data(pattern);
 
+	auto length = len(s) - len(pattern);
+
+	for(Size i = start; i < length; i++){
+		if(mem_compare(&source_p[i], pattern_p, len(pattern)) == 0){
+			return i;
+		}
+	}
+
+	return -1;
+}
