@@ -18,7 +18,7 @@ Utf8Iterator str_iterator_reversed(String s) {
 	return it;
 }
 
-String str_clone(String s, Arena* a){
+String str_clone(String s, Allocator a){
 	auto buf = make<Byte>(a, len(s) + 1);
 	buf[len(buf) - 1] = 0;
 	mem_copy_no_overlap(raw_data(buf), raw_data(s), len(s));

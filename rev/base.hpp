@@ -378,38 +378,75 @@ constexpr U32 mem_protection_read    = (1 << 0);
 constexpr U32 mem_protection_write   = (1 << 1);
 constexpr U32 mem_protection_execute = (1 << 2);
 
-template<typename A>
-concept Allocator = requires(A* allocator, Size nbytes, Size align, void* ptr, Size old_size) {
-	{ mem_alloc(allocator, nbytes, align) } -> meta::ConvertibleTo<void*>;
-	{ mem_realloc(allocator, ptr, nbytes, old_size, align) } -> meta::ConvertibleTo<void*>;
-	{ mem_free(allocator, ptr, nbytes) } -> meta::SameAs<void>;
-	{ mem_free_all(allocator, nbytes, align) } -> meta::SameAs<void>;
+enum class AllocatorOp : U32 {
+	Query    = 0, // Query allocator's capabilities
+	Alloc    = 1, // Allocate a chunk of memory
+	Resize   = 2, // Resize an allocation in-place
+	Free     = 3, // Mark allocation as free
+	FreeAll  = 4, // Mark allocations as free
+	Realloc  = 5, // Re-allocate pointer
 };
 
+enum class AllocatorCapability : U32 {
+	AllocAny = 1 << 0, // Can alloc any size
+	FreeAny  = 1 << 1, // Can free in any order
+	FreeAll  = 1 << 2, // Can free all allocations
+	Resize   = 1 << 3, // Can resize in-place
+	AlignAny = 1 << 4, // Can alloc aligned to any alignment
+	Virtual  = 1 << 5, // Can manipulate virtual memory
+};
+
+// Memory allocator method
+using AllocatorFunc = void* (*) (
+	void* impl,
+	AllocatorOp op,
+	void* old_ptr,
+	Size old_size,
+	Size size,
+	Size align,
+	U32* capabilities
+);
+
+// Memory allocator interface
+struct Allocator {
+	void* data = 0;
+	AllocatorFunc func = 0;
+};
+
+void* mem_alloc(Allocator a, Size nbytes, Size align);
+
+void* mem_resize(Allocator a, void* ptr, Size new_size);
+
+void mem_free(Allocator a, void* ptr, Size old_size);
+
+void* mem_realloc(Allocator a, void* ptr, Size old_size, Size new_size, Size align);
+
+void mem_free_all(Allocator a);
+
 template<typename T> [[nodiscard]]
-T* make(Allocator auto* a){
+T* make(Allocator a){
 	T* p = (T*)mem_alloc(a, sizeof(T), alignof(T));
 	return p;
 }
 
 template<typename T> [[nodiscard]]
-Slice<T> make(Allocator auto* a, Size elems){
+Slice<T> make(Allocator a, Size elems){
 	T* p = (T*)mem_alloc(a, sizeof(T) * elems, alignof(T));
 	return slice<T>(p, elems);
 }
 
 template<typename T>
-void destroy(Allocator auto* a, T* obj){
+void destroy(Allocator a, T* obj){
 	mem_free(a, obj, sizeof(T));
 }
 
 template<typename T>
-void destroy(Allocator auto* a, Slice<T> s){
+void destroy(Allocator a, Slice<T> s){
 	mem_free(a, raw_data(s), sizeof(T) * len(s));
 }
 
 template<typename T>
-void destroy(Allocator auto* a, String s){
+void destroy(Allocator a, String s){
 	mem_free(a, raw_data(s), sizeof(T) * len(s));
 }
 
@@ -454,13 +491,13 @@ struct Arena {
 	ArenaType type;
 };
 
-void* mem_alloc(Arena* a, Size nbytes, Size align);
+void* arena_alloc(Arena* a, Size nbytes, Size align);
 
-void* mem_resize_in_place(Arena* a, void* ptr, Size new_size);
+void* arena_resize_in_place(Arena* a, void* ptr, Size new_size);
 
-void* mem_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align);
+void* arena_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align);
 
-void mem_free_all(Arena* a);
+void arena_free_all(Arena* a);
 
 Arena arena_from_buffer(Slice<U8> buf);
 
@@ -468,67 +505,80 @@ Arena arena_create_virtual(Size reserve);
 
 void arena_destroy(Arena* a);
 
-// template<typename T>
-// struct DynamicArray {
-// 	T*     data;
-// 	Size   cap;
-// 	Size   len;
-// 	Arena* arena;
-//
-// 	T& operator[](Size idx){
-// 		bounds_check_assert(idx >= 0 && idx < len, "Out of bounds access to dynamic array");
-// 		return data[idx];
-// 	}
-//
-// 	T const& operator[](Size idx) const{
-// 		bounds_check_assert(idx >= 0 && idx < len, "Out of bounds access to dynamic array");
-// 		return data[idx];
-// 	}
-// };
-//
-// template<typename T>
-// Slice<T> slice(DynamicArray<T> arr){
-// 	return slice(arr.data, arr.len);
-// }
-//
-// template<typename T>
-// DynamicArray<T> dynamic_array_create(Arena* arena, Size initial_cap = 16){
-// 	DynamicArray<T> arr;
-// 	arr.cap = initial_cap;
-// 	arr.len = 0;
-// 	arr.arena = arena;
-// 	arr.data = (T*)mem_alloc(arena, initial_cap * sizeof(T), alignof(T));
-// 	return arr;
-// }
-//
-// template<typename T, typename U = T>
-// bool append(DynamicArray<T>* arr, U elem){
-// 	[[unlikely]] if(arr->len >= arr->cap){
-// 		Size new_cap = mem_align_forward_size(16, arr->len * 2);
-// 		auto new_data = (T*)mem_realloc(
-// 				arr->arena,
-// 				arr->data,
-// 				arr->cap * sizeof(T),
-// 				new_cap, alignof(T));
-//
-// 		if(new_data == nullptr){
-// 			return false;
-// 		}
-// 		arr->data = new_data;
-// 	}
-//
-// 	arr->data[arr->len] = T(elem);
-// 	arr->len += 1;
-// 	return true;
-// }
-//
-// template<typename T>
-// bool pop(DynamicArray<T>& arr){
-// 	if(arr.len <= 0){ return false; }
-// 	arr->len -= 1;
-// 	return true;
-// }
-//
+Allocator arena_allocator(Arena* a);
+
+//// Dynamic Array ////////////////////////////////////////////////////////////
+template<typename T>
+struct DynamicArray {
+	T*        data;
+	Size      capacity;
+	Size      length;
+	Allocator allocator;
+
+	T& operator[](Size idx){
+		bounds_check_assert(idx >= 0 && idx < length, "Out of bounds access to dynamic array");
+		return data[idx];
+	}
+
+	T const& operator[](Size idx) const{
+		bounds_check_assert(idx >= 0 && idx < length, "Out of bounds access to dynamic array");
+		return data[idx];
+	}
+
+	// Accessors
+	friend Size len(DynamicArray<T> a){ return a.length; }
+	friend Size cap(DynamicArray<T> a){ return a.capacity; }
+	friend T* raw_data(DynamicArray<T> a){ return a.data; }
+};
+
+template<typename T>
+void clear(DynamicArray<T>* arr){
+	mem_free(arr->allocator, arr->data, arr->length);
+}
+
+template<typename T>
+Slice<T> slice(DynamicArray<T> arr){
+	return slice(arr.data, arr.length);
+}
+
+template<typename T>
+DynamicArray<T> dynamic_array_create(Allocator alloc, Size initial_cap = 16){
+	DynamicArray<T> arr;
+	arr.capacity = initial_cap;
+	arr.length = 0;
+	arr.allocator = alloc;
+	arr.data = (T*)mem_alloc(alloc, initial_cap * sizeof(T), alignof(T));
+	return arr;
+}
+
+template<typename T, typename U = T>
+bool append(DynamicArray<T>* arr, U elem){
+	[[unlikely]] if(arr->length >= arr->capacity){
+		Size new_cap = mem_align_forward_size(16, arr->length * 2);
+		auto new_data = (T*)mem_realloc(
+				arr->allocator,
+				arr->data,
+				arr->capacity * sizeof(T),
+				new_cap, alignof(T));
+
+		if(new_data == nullptr){
+			return false;
+		}
+		arr->data = new_data;
+	}
+
+	arr->data[arr->length] = T(elem);
+	arr->length += 1;
+	return true;
+}
+
+template<typename T>
+bool pop(DynamicArray<T>& arr){
+	if(arr.length <= 0){ return false; }
+	arr->len -= 1;
+	return true;
+}
+
 
 //// String Utilities /////////////////////////////////////////////////////////
 String str_trim(String s, String cutset);
@@ -546,6 +596,6 @@ bool str_ends_with(String s, String suffix);
 Size str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
-String str_clone(String s, Arena* arena);
+String str_clone(String s, Allocator allocator);
 
 #endif /* Include guard */
