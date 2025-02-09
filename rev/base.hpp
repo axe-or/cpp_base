@@ -5,9 +5,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdalign.h>
-#include <tgmath.h>
-#include <limits.h>
-#include <float.h>
 #include <atomic>
 
 using I8  = int8_t;
@@ -91,23 +88,6 @@ static_assert(sizeof(F32) == 4 && sizeof(F64) == 8, "Bad float size");
 static_assert(sizeof(Size) == sizeof(Size), "Mismatched (i/u)size");
 static_assert(sizeof(void(*)(void)) == sizeof(void*), "Function pointers and data pointers must be of the same width");
 static_assert(sizeof(void(*)(void)) == sizeof(Uintptr), "Mismatched pointer types");
-static_assert(CHAR_BIT == 8, "Invalid char size");
-
-namespace meta {
-template <typename A, typename B>
-inline constexpr bool same_type = false;
-
-template <typename A>
-inline constexpr bool same_type<A, A> = true;
-
-template <typename A, typename B>
-concept SameAs = same_type<A, B>;
-
-template<class T> T&& decl_value() noexcept;
-
-template<typename From, typename To>
-concept ConvertibleTo = requires { static_cast<To>(decl_value<From>()); };
-}
 
 namespace impl_defer {
 	template<typename F>
@@ -579,7 +559,6 @@ bool pop(DynamicArray<T>& arr){
 	return true;
 }
 
-
 //// String Utilities /////////////////////////////////////////////////////////
 String str_trim(String s, String cutset);
 
@@ -597,5 +576,41 @@ Size str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
 String str_clone(String s, Allocator allocator);
+
+//// Heap allocator ///////////////////////////////////////////////////////////
+Allocator heap_allocator();
+
+//// SIMD /////////////////////////////////////////////////////////////////////
+namespace simd {
+#define VECTOR_DECL(T, N) __attribute__((vector_size((N) * sizeof(T)))) T;
+
+// 128-bit
+using I8x16 = VECTOR_DECL(I8, 16);
+using I16x8 = VECTOR_DECL(I16, 8);
+using I32x4 = VECTOR_DECL(I32, 4);
+using I64x2 = VECTOR_DECL(I64, 2);
+
+using U8x16 = VECTOR_DECL(U8, 16);
+using U16x8 = VECTOR_DECL(U16, 8);
+using U32x4 = VECTOR_DECL(U32, 4);
+using U64x2 = VECTOR_DECL(U64, 2);
+
+using F32x4 = VECTOR_DECL(F32, 4);
+using F64x2 = VECTOR_DECL(F64, 2);
+
+// 256-bit
+using I8x32  = VECTOR_DECL(I8, 32);
+using I16x16 = VECTOR_DECL(I16, 16);
+using I32x8  = VECTOR_DECL(I32, 8);
+using I64x4  = VECTOR_DECL(I64, 4);
+
+using U8x32  = VECTOR_DECL(U8, 32);
+using U16x16 = VECTOR_DECL(U16, 16);
+using U32x8  = VECTOR_DECL(U32, 8);
+using U64x4  = VECTOR_DECL(U64, 4);
+
+using F32x8 = VECTOR_DECL(F32, 8);
+using F64x4 = VECTOR_DECL(F64, 4);
+}
 
 #endif /* Include guard */
