@@ -93,6 +93,22 @@ static_assert(sizeof(void(*)(void)) == sizeof(void*), "Function pointers and dat
 static_assert(sizeof(void(*)(void)) == sizeof(Uintptr), "Mismatched pointer types");
 static_assert(CHAR_BIT == 8, "Invalid char size");
 
+namespace meta {
+template <typename A, typename B>
+inline constexpr bool same_type = false;
+
+template <typename A>
+inline constexpr bool same_type<A, A> = true;
+
+template <typename A, typename B>
+concept SameAs = same_type<A, B>;
+
+template<class T> T&& decl_value() noexcept;
+
+template<typename From, typename To>
+concept ConvertibleTo = requires { static_cast<To>(decl_value<From>()); };
+}
+
 namespace impl_defer {
 	template<typename F>
 	struct Deferred {
@@ -231,158 +247,27 @@ Size mem_align_forward_size(Size p, Size a){
 	return p;
 }
 
-constexpr Size mem_page_size = 4096;
-
-constexpr U32 mem_protection_none    = 0;
-constexpr U32 mem_protection_read    = (1 << 0);
-constexpr U32 mem_protection_write   = (1 << 1);
-constexpr U32 mem_protection_execute = (1 << 2);
-
-struct PageBlock {
-	Size reserved;
-	Size commited;
-	void* pointer;
-};
-
-PageBlock page_block_create(Size nbytes);
-
-void page_block_destroy(PageBlock* blk);
-
-void* page_block_push(PageBlock* blk, Size nbytes);
-
-void page_block_pop(PageBlock* blk, Size nbytes);
-
-void* virtual_reserve(Size nbytes);
-
-void virtual_release(void* pointer, Size nbytes);
-
-bool virtual_protect(void* pointer, U32 prot);
-
-void* virtual_commit(void* pointer, Size nbytes);
-
-void virtual_decommit(void* pointer, Size nbytes);
-
-enum struct ArenaType : U32 {
-	Buffer  = 0,
-	Virtual = 1,
-};
-
-struct Arena {
-	PageBlock data;
-	Size offset;
-	Uintptr last_allocation;
-	ArenaType type;
-
-};
-
-Arena arena_from_buffer(Slice<U8> buf);
-
-Arena arena_create_virtual(Size reserve);
-
-void arena_destroy(Arena* a);
-
-void* mem_alloc(Arena* a, Size nbytes, Size align);
-
-void* mem_resize_in_place(Arena* a, void* ptr, Size new_size);
-
-void* mem_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align);
-
-void mem_free_all(Arena* a);
-
-template<typename T> [[nodiscard]]
-T* make(Arena* a){
-	T* p = (T*)mem_alloc(a, sizeof(T), alignof(T));
-	return p;
-}
-
-template<typename T> [[nodiscard]]
-Slice<T> make(Arena* a, Size elems){
-	T* p = (T*)mem_alloc(a, sizeof(T) * elems, alignof(T));
-	return slice<T>(p, elems);
-}
-
-template<typename T>
-struct DynamicArray {
-	T*     data;
-	Size   cap;
-	Size   len;
-	Arena* arena;
-
-	T& operator[](Size idx){
-		bounds_check_assert(idx >= 0 && idx < len, "Out of bounds access to dynamic array");
-		return data[idx];
-	}
-
-	T const& operator[](Size idx) const{
-		bounds_check_assert(idx >= 0 && idx < len, "Out of bounds access to dynamic array");
-		return data[idx];
-	}
-};
-
-
-template<typename T>
-Slice<T> slice(DynamicArray<T> arr){
-	return slice(arr.data, arr.len);
-}
-
-template<typename T>
-DynamicArray<T> dynamic_array_create(Arena* arena, Size initial_cap = 16){
-	DynamicArray<T> arr;
-	arr.cap = initial_cap;
-	arr.len = 0;
-	arr.arena = arena;
-	arr.data = (T*)mem_alloc(arena, initial_cap * sizeof(T), alignof(T));
-	return arr;
-}
-
-template<typename T, typename U = T>
-bool append(DynamicArray<T>* arr, U elem){
-	[[unlikely]] if(arr->len >= arr->cap){
-		Size new_cap = mem_align_forward_size(16, arr->len * 2);
-		auto new_data = (T*)mem_realloc(
-				arr->arena,
-				arr->data,
-				arr->cap * sizeof(T),
-				new_cap, alignof(T));
-
-		if(new_data == nullptr){
-			return false;
-		}
-		arr->data = new_data;
-	}
-
-	arr->data[arr->len] = T(elem);
-	arr->len += 1;
-	return true;
-}
-
-template<typename T>
-bool pop(DynamicArray<T>& arr){
-	if(arr.len <= 0){ return false; }
-	arr->len -= 1;
-	return true;
-}
-
-struct EncodeResult {
+//// UTF-8 ////////////////////////////////////////////////////////////////////
+struct Utf8EncodeResult {
 	Byte bytes[4];
 	I32 len;
 };
 
-struct DecodeResult {
+struct Utf8DecodeResult {
 	Rune codepoint;
 	I32 len;
 };
 
 constexpr Rune ERROR = 0xfffd;
 
-constexpr EncodeResult ERROR_ENCODED = {
+constexpr Utf8EncodeResult ERROR_ENCODED = {
 	.bytes = {0xef, 0xbf, 0xbd},
 	.len = 0,
 };
 
-EncodeResult utf8_encode(Rune c);
+Utf8EncodeResult utf8_encode(Rune c);
 
-DecodeResult utf8_decode(Slice<Byte> buf);
+Utf8DecodeResult utf8_decode(Slice<Byte> buf);
 
 struct Utf8Iterator {
 	Slice<Byte> data;
@@ -397,6 +282,7 @@ Rune iter_next(Utf8Iterator* it);
 
 Rune iter_prev(Utf8Iterator* it);
 
+//// String ///////////////////////////////////////////////////////////////////
 static inline
 Size cstring_len(char const* cstr){
 	Size size = 0;
@@ -467,7 +353,6 @@ String string_from_bytes(Slice<Byte> buf){
 	return String(raw_data(buf), len(buf));
 }
 
-// Get the sub-slice of elements after index (inclusive)
 static inline
 String slice_right(String s, Size idx){
 	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
@@ -475,7 +360,6 @@ String slice_right(String s, Size idx){
 	return res;
 }
 
-// Get the sub-slice of elements before index (exclusive)
 static inline
 String slice_left(String s, Size idx){
 	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
@@ -487,6 +371,166 @@ Utf8Iterator str_iterator(String s);
 
 Utf8Iterator str_iterator_reversed(String s);
 
+
+//// Memory ///////////////////////////////////////////////////////////////////
+constexpr U32 mem_protection_none    = 0;
+constexpr U32 mem_protection_read    = (1 << 0);
+constexpr U32 mem_protection_write   = (1 << 1);
+constexpr U32 mem_protection_execute = (1 << 2);
+
+template<typename A>
+concept Allocator = requires(A* allocator, Size nbytes, Size align, void* ptr, Size old_size) {
+	{ mem_alloc(allocator, nbytes, align) } -> meta::ConvertibleTo<void*>;
+	{ mem_realloc(allocator, ptr, nbytes, old_size, align) } -> meta::ConvertibleTo<void*>;
+	{ mem_free(allocator, ptr, nbytes) } -> meta::SameAs<void>;
+	{ mem_free_all(allocator, nbytes, align) } -> meta::SameAs<void>;
+};
+
+template<typename T> [[nodiscard]]
+T* make(Allocator auto* a){
+	T* p = (T*)mem_alloc(a, sizeof(T), alignof(T));
+	return p;
+}
+
+template<typename T> [[nodiscard]]
+Slice<T> make(Allocator auto* a, Size elems){
+	T* p = (T*)mem_alloc(a, sizeof(T) * elems, alignof(T));
+	return slice<T>(p, elems);
+}
+
+template<typename T>
+void destroy(Allocator auto* a, T* obj){
+	mem_free(a, obj, sizeof(T));
+}
+
+template<typename T>
+void destroy(Allocator auto* a, Slice<T> s){
+	mem_free(a, raw_data(s), sizeof(T) * len(s));
+}
+
+template<typename T>
+void destroy(Allocator auto* a, String s){
+	mem_free(a, raw_data(s), sizeof(T) * len(s));
+}
+
+//// Virtual Memory ///////////////////////////////////////////////////////////
+constexpr Size mem_page_size = 4096;
+
+struct PageBlock {
+	Size reserved;
+	Size commited;
+	void* pointer;
+};
+
+PageBlock page_block_create(Size nbytes);
+
+void page_block_destroy(PageBlock* blk);
+
+void* page_block_push(PageBlock* blk, Size nbytes);
+
+void page_block_pop(PageBlock* blk, Size nbytes);
+
+void* virtual_reserve(Size nbytes);
+
+void virtual_release(void* pointer, Size nbytes);
+
+bool virtual_protect(void* pointer, U32 prot);
+
+void* virtual_commit(void* pointer, Size nbytes);
+
+void virtual_decommit(void* pointer, Size nbytes);
+
+
+//// Arena ////////////////////////////////////////////////////////////////////
+enum struct ArenaType : U32 {
+	Buffer  = 0,
+	Virtual = 1,
+};
+
+struct Arena {
+	PageBlock data;
+	Size offset;
+	Uintptr last_allocation;
+	ArenaType type;
+};
+
+void* mem_alloc(Arena* a, Size nbytes, Size align);
+
+void* mem_resize_in_place(Arena* a, void* ptr, Size new_size);
+
+void* mem_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align);
+
+void mem_free_all(Arena* a);
+
+Arena arena_from_buffer(Slice<U8> buf);
+
+Arena arena_create_virtual(Size reserve);
+
+void arena_destroy(Arena* a);
+
+// template<typename T>
+// struct DynamicArray {
+// 	T*     data;
+// 	Size   cap;
+// 	Size   len;
+// 	Arena* arena;
+//
+// 	T& operator[](Size idx){
+// 		bounds_check_assert(idx >= 0 && idx < len, "Out of bounds access to dynamic array");
+// 		return data[idx];
+// 	}
+//
+// 	T const& operator[](Size idx) const{
+// 		bounds_check_assert(idx >= 0 && idx < len, "Out of bounds access to dynamic array");
+// 		return data[idx];
+// 	}
+// };
+//
+// template<typename T>
+// Slice<T> slice(DynamicArray<T> arr){
+// 	return slice(arr.data, arr.len);
+// }
+//
+// template<typename T>
+// DynamicArray<T> dynamic_array_create(Arena* arena, Size initial_cap = 16){
+// 	DynamicArray<T> arr;
+// 	arr.cap = initial_cap;
+// 	arr.len = 0;
+// 	arr.arena = arena;
+// 	arr.data = (T*)mem_alloc(arena, initial_cap * sizeof(T), alignof(T));
+// 	return arr;
+// }
+//
+// template<typename T, typename U = T>
+// bool append(DynamicArray<T>* arr, U elem){
+// 	[[unlikely]] if(arr->len >= arr->cap){
+// 		Size new_cap = mem_align_forward_size(16, arr->len * 2);
+// 		auto new_data = (T*)mem_realloc(
+// 				arr->arena,
+// 				arr->data,
+// 				arr->cap * sizeof(T),
+// 				new_cap, alignof(T));
+//
+// 		if(new_data == nullptr){
+// 			return false;
+// 		}
+// 		arr->data = new_data;
+// 	}
+//
+// 	arr->data[arr->len] = T(elem);
+// 	arr->len += 1;
+// 	return true;
+// }
+//
+// template<typename T>
+// bool pop(DynamicArray<T>& arr){
+// 	if(arr.len <= 0){ return false; }
+// 	arr->len -= 1;
+// 	return true;
+// }
+//
+
+//// String Utilities /////////////////////////////////////////////////////////
 String str_trim(String s, String cutset);
 
 String str_trim_leading(String s, String cutset);
@@ -503,8 +547,5 @@ Size str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
 String str_clone(String s, Arena* arena);
-
-#warning "Using debug print"
-#include "debug_print.cpp"
 
 #endif /* Include guard */
