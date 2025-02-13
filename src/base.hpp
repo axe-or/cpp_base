@@ -577,7 +577,7 @@ bool insert(DynamicArray<T>* arr, Size idx, U elem){
 	bool ok = append(arr, elem);
 	if(!ok){ return false; }
 
-	Size nbytes = sizeof(T) * (arr->_length - idx);
+	Size nbytes = sizeof(T) * (arr->_length - 1 - idx);
 	mem_copy(&arr->_data[idx + 1], &arr->_data[idx], nbytes);
 	arr->_data[idx] = elem;
 	return true;
@@ -628,6 +628,12 @@ Size str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
 String str_clone(String s, Allocator allocator);
+
+//// Mimalloc /////////////////////////////////////////////////////////////////
+#ifdef USE_MIMALLOC
+Allocator mem_mi_allocator();
+#endif
+
 
 //// SIMD /////////////////////////////////////////////////////////////////////
 namespace simd {
