@@ -118,44 +118,43 @@ void bounds_check_assert(bool pred, char const * msg);
 
 template<typename T>
 struct Slice {
-private:
-	T*   data   = nullptr;
-	Size length = 0;
-public:
+	T*   _data   = nullptr;
+	Size _length = 0;
+
 	T& operator[](Size idx) noexcept {
-		bounds_check_assert(idx >= 0 && idx < length, "Index to slice is out of bounds");
-		return data[idx];
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to slice is out of bounds");
+		return _data[idx];
 	}
 
 	T const& operator[](Size idx) const noexcept {
-		bounds_check_assert(idx >= 0 && idx < length, "Index to slice is out of bounds");
-		return data[idx];
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to slice is out of bounds");
+		return _data[idx];
 	}
 
 	Slice<T> operator[](Pair<Size> range){
 		Size from = range.a;
 		Size to = range.b;
 
-		bounds_check_assert(from >= 0 && from < length && to >= 0 && to <= length && from <= to, "Index to sub-slice is out of bounds");
+		bounds_check_assert(from >= 0 && from < _length && to >= 0 && to <= _length && from <= to, "Index to sub-slice is out of bounds");
 
 		Slice<T> s;
-		s.length = to - from;
-		s.data = &data[from];
+		s._length = to - from;
+		s._data = &_data[from];
 		return s;
 	}
 
 	Slice(){}
 
-	explicit Slice(T* data, Size len) : data{data}, length{len} {}
+	explicit Slice(T* data, Size len) : _data{data}, _length{len} {}
 
 	// Accessors
-	friend Size len(Slice<T> s){ return s.length; }
-	friend T* raw_data(Slice<T> s){ return s.data; }
+	friend Size len(Slice<T> s){ return s._length; }
+	friend T* raw_data(Slice<T> s){ return s._data; }
 };
 
 template<typename T>
 Slice<T> slice(T* data, Size len){
-	bounds_check_assert(len > 0, "Negative length value");
+	bounds_check_assert(len >= 0, "Negative length value");
 	auto s = Slice<T>(data, len);
 	return s;
 }
@@ -164,13 +163,13 @@ Slice<T> slice(T* data, Size len){
 template<typename T>
 Slice<T> slice(Slice<T> s, Size from, Size to){
 	bounds_check_assert(
-		from >= 0 && from < s.length &&
-		to >= 0 && to <= s.length &&
+		from >= 0 && from < s._length &&
+		to >= 0 && to <= s._length &&
 		from <= to,
 		"Index to sub-slice is out of bounds");
 	Slice<T> res;
-	res.length = to - from;
-	res.data = &s.data[from];
+	res._length = to - from;
+	res._data = &s._data[from];
 	return res;
 }
 
@@ -373,7 +372,6 @@ enum class AllocatorCapability : U32 {
 	FreeAll  = 1 << 2, // Can free all allocations
 	Resize   = 1 << 3, // Can resize in-place
 	AlignAny = 1 << 4, // Can alloc aligned to any alignment
-	Virtual  = 1 << 5, // Can manipulate virtual memory
 };
 
 // Memory allocator method
@@ -490,73 +488,127 @@ Allocator arena_allocator(Arena* a);
 //// Dynamic Array ////////////////////////////////////////////////////////////
 template<typename T>
 struct DynamicArray {
-	T*        data;
-	Size      capacity;
-	Size      length;
-	Allocator allocator;
+	T*        _data;
+	Size      _capacity;
+	Size      _length;
+	Allocator _allocator;
 
 	T& operator[](Size idx){
-		bounds_check_assert(idx >= 0 && idx < length, "Out of bounds access to dynamic array");
-		return data[idx];
+		bounds_check_assert(idx >= 0 && idx < _length, "Out of bounds access to dynamic array");
+		return _data[idx];
 	}
 
 	T const& operator[](Size idx) const{
-		bounds_check_assert(idx >= 0 && idx < length, "Out of bounds access to dynamic array");
-		return data[idx];
+		bounds_check_assert(idx >= 0 && idx < _length, "Out of bounds access to dynamic array");
+		return _data[idx];
+	}
+
+	Slice<T> operator[](Pair<Size> range){
+		Size from = range.a;
+		Size to = range.b;
+
+		bounds_check_assert(from >= 0 && from < _length && to >= 0 && to <= _length && from <= to, "Index to sub-slice is out of bounds");
+
+		Slice<T> s;
+		s._length = to - from;
+		s._data = &_data[from];
+		return s;
 	}
 
 	// Accessors
-	friend Size len(DynamicArray<T> a){ return a.length; }
-	friend Size cap(DynamicArray<T> a){ return a.capacity; }
-	friend T* raw_data(DynamicArray<T> a){ return a.data; }
+	friend Size len(DynamicArray<T> a){ return a._length; }
+	friend Size cap(DynamicArray<T> a){ return a._capacity; }
+	friend T* raw_data(DynamicArray<T> a){ return a._data; }
+	friend Allocator allocator_of(DynamicArray<T> a){ return a._allocator; }
 };
 
 template<typename T>
 void clear(DynamicArray<T>* arr){
-	mem_free(arr->allocator, arr->data, arr->length);
+	mem_free(arr->_allocator, arr->_data, arr->_length);
 }
 
 template<typename T>
 Slice<T> slice(DynamicArray<T> arr){
-	return slice(arr.data, arr.length);
+	return slice(arr._data, arr._length);
 }
 
 template<typename T>
 DynamicArray<T> dynamic_array_create(Allocator alloc, Size initial_cap = 16){
 	DynamicArray<T> arr;
-	arr.capacity = initial_cap;
-	arr.length = 0;
-	arr.allocator = alloc;
-	arr.data = (T*)mem_alloc(alloc, initial_cap * sizeof(T), alignof(T));
+	arr._capacity = initial_cap;
+	arr._length = 0;
+	arr._allocator = alloc;
+	arr._data = (T*)mem_alloc(alloc, initial_cap * sizeof(T), alignof(T));
 	return arr;
 }
 
 template<typename T, typename U = T>
 bool append(DynamicArray<T>* arr, U elem){
-	[[unlikely]] if(arr->length >= arr->capacity){
-		Size new_cap = mem_align_forward_size(16, arr->length * 2);
+	[[unlikely]] if(arr->_length >= arr->_capacity){
+		Size new_cap = mem_align_forward_size(arr->_length * 2, 16);
 		auto new_data = (T*)mem_realloc(
-				arr->allocator,
-				arr->data,
-				arr->capacity * sizeof(T),
+				arr->_allocator,
+				arr->_data,
+				arr->_capacity * sizeof(T),
 				new_cap, alignof(T));
-
 		if(new_data == nullptr){
 			return false;
 		}
-		arr->data = new_data;
+		arr->_data = new_data;
 	}
 
-	arr->data[arr->length] = T(elem);
-	arr->length += 1;
+	arr->_data[arr->_length] = static_cast<T>(elem);
+	arr->_length += 1;
 	return true;
 }
 
 template<typename T>
-bool pop(DynamicArray<T>& arr){
-	if(arr.length <= 0){ return false; }
-	arr->len -= 1;
+bool pop(DynamicArray<T>* arr){
+	if(arr->_length <= 0){ return false; }
+	arr->_length -= 1;
 	return true;
+}
+
+template<typename T, typename U = T>
+bool insert(DynamicArray<T>* arr, Size idx, U elem){
+	bounds_check_assert(idx >= 0 && idx <= arr->_length, "Out of bounds index to insert_swap");
+	if(idx == arr->_length){ return append(arr, elem); }
+
+	bool ok = append(arr, elem);
+	if(!ok){ return false; }
+
+	Size nbytes = sizeof(T) * (arr->_length - idx);
+	mem_copy(&arr->_data[idx + 1], &arr->_data[idx], nbytes);
+	arr->_data[idx] = elem;
+	return true;
+}
+
+template<typename T, typename U = T>
+bool insert_swap(DynamicArray<T>* arr, Size idx, U elem){
+	bounds_check_assert(idx >= 0 && idx <= arr->_length, "Out of bounds index to insert_swap");
+	if(idx == arr->_length){ return append(arr, elem); }
+
+	bool ok = append(arr, arr->_data[idx]);
+	[[unlikely]] if(!ok){ return false; }
+	arr->_data[idx] = static_cast<T>(elem);
+
+	return true;
+}
+
+template<typename T>
+void remove_swap(DynamicArray<T>* arr, Size idx){
+	bounds_check_assert(idx >= 0 && idx < arr->_length, "Out of bounds index to remove_swap");
+	T last = arr->_data[arr->_length - 1];
+	arr->_data[idx] = last;
+	arr->_length -= 1;
+}
+
+template<typename T>
+void remove(DynamicArray<T>* arr, Size idx){
+	bounds_check_assert(idx >= 0 && idx < arr->_length, "Out of bounds index to remove");
+	Size nbytes = sizeof(T) * (arr->_length - idx + 1);
+	mem_copy(&arr->_data[idx], &arr->_data[idx+1], nbytes);
+	arr->_length -= 1;
 }
 
 //// String Utilities /////////////////////////////////////////////////////////
@@ -576,9 +628,6 @@ Size str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
 String str_clone(String s, Allocator allocator);
-
-//// Heap allocator ///////////////////////////////////////////////////////////
-Allocator heap_allocator();
 
 //// SIMD /////////////////////////////////////////////////////////////////////
 namespace simd {
@@ -612,5 +661,7 @@ using U64x4  = VECTOR_DECL(U64, 4);
 using F32x8 = VECTOR_DECL(F32, 8);
 using F64x4 = VECTOR_DECL(F64, 4);
 }
+
+
 
 #endif /* Include guard */

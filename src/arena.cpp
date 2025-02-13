@@ -17,7 +17,7 @@ void* arena_allocator_func(
 
 	switch (op) {
 	case M::Query:
-		*capabilities = U32(C::AlignAny) | U32(C::AllocAny) | U32(C::FreeAll) | ((arena->type == ArenaType::Virtual) ? U32(C::Virtual) : 0);
+		*capabilities = U32(C::AlignAny) | U32(C::AllocAny) | U32(C::FreeAll);
 		return nullptr;
 
 	case M::Alloc:
