@@ -7,10 +7,6 @@
 #include "utf8.cpp"
 #include "strings.cpp"
 
-#ifdef USE_MIMALLOC
-	#include "mimalloc_allocator.cpp"
-#endif
-
 #include "virtual_memory.cpp"
 #if defined(PLATFORM_OS_WINDOWS)
 	#include "virtual_memory_windows.cpp"

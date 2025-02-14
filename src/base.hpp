@@ -698,11 +698,6 @@ Size str_find(String s, String substr, Size start = 0);
 [[nodiscard]]
 String str_clone(String s, Allocator allocator);
 
-//// Mimalloc /////////////////////////////////////////////////////////////////
-#ifdef USE_MIMALLOC
-Allocator mem_mi_allocator();
-#endif
-
 //// SIMD /////////////////////////////////////////////////////////////////////
 namespace simd {
 #define VECTOR_DECL(T, N) __attribute__((vector_size((N) * sizeof(T)))) T;
