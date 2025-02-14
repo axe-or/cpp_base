@@ -112,6 +112,7 @@ retry:
 	a->offset += required;
 	void* allocation = (U8*)a->data.pointer + (a->offset - size);
 	a->last_allocation = (Uintptr)allocation;
+	mem_set(allocation, 0, size);
 	return allocation;
 }
 

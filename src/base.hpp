@@ -616,6 +616,70 @@ void remove(DynamicArray<T>* arr, Size idx){
 	arr->_length -= 1;
 }
 
+//// Map //////////////////////////////////////////////////////////////////////
+
+static inline
+U32 map_hash_func_raw(Byte const * data, Size nbytes){
+	constexpr U32 prime = 0x01000193;
+	constexpr U32 offset_basis = 0x811c9dc5;
+
+	U32 hash = offset_basis;
+	for(Size i = 0; i < nbytes; i ++){
+		Byte b = data[i];
+		hash = hash ^ b;
+		hash = hash * prime;
+	}
+
+	return hash;
+}
+
+template<typename K, typename V>
+struct MapSlot {
+	K key;
+	V value;
+	MapSlot* next;
+};
+
+template<typename K, typename V>
+struct Map {
+	MapSlot<K, V>* base_slots;
+	Size capacity;
+	Allocator allocator;
+};
+
+template<typename K, typename V>
+Map<K, V> map_create(Allocator allocator, Size capacity){
+	ensure((capacity & (capacity - 1)) == 0, "Capacity must be a power of 2");
+	Map<K, V> m;
+	auto base_slots = mem_alloc(allocator, capacity * sizeof(MapSlot<K, V>), alignof(MapSlot<K, V>));
+	if(!base_slots){ return m; }
+
+	m.base_slots = static_cast<MapSlot<K, V>*>(base_slots);
+	m.capacity = capacity;
+	m.allocator = allocator;
+
+	return m;
+}
+
+template<typename K, typename V, typename PK = K>
+bool set(Map<K, V>* map, PK key, V val){
+	auto map_key = K(key);
+
+	auto data = (Byte const*)&map_key;
+	Size nbytes = sizeof(K);
+	U32 hash = map_hash_func_raw(data, nbytes);
+	U32 pos = hash & (U32(map->capacity) - 1); // Fast modulo for powers of 2
+
+	if(map->base_slots[pos].next == nullptr){
+		map->base_slots[pos].key = map_key;
+		map->base_slots[pos].value = val;
+	}
+	else {
+		panic("Collision");
+	}
+	return true;
+}
+
 //// String Utilities /////////////////////////////////////////////////////////
 String str_trim(String s, String cutset);
 
@@ -638,7 +702,6 @@ String str_clone(String s, Allocator allocator);
 #ifdef USE_MIMALLOC
 Allocator mem_mi_allocator();
 #endif
-
 
 //// SIMD /////////////////////////////////////////////////////////////////////
 namespace simd {
