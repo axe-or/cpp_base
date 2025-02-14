@@ -524,6 +524,11 @@ struct DynamicArray {
 
 template<typename T>
 void clear(DynamicArray<T>* arr){
+	arr->_length = 0;
+}
+
+template<typename T>
+void destroy(DynamicArray<T>* arr){
 	mem_free(arr->_allocator, arr->_data, arr->_length);
 }
 
@@ -667,7 +672,5 @@ using U64x4  = VECTOR_DECL(U64, 4);
 using F32x8 = VECTOR_DECL(F32, 8);
 using F64x4 = VECTOR_DECL(F64, 4);
 }
-
-
 
 #endif /* Include guard */
