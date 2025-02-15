@@ -357,7 +357,7 @@ constexpr U32 mem_protection_read    = (1 << 0);
 constexpr U32 mem_protection_write   = (1 << 1);
 constexpr U32 mem_protection_execute = (1 << 2);
 
-enum class AllocatorOp : U32 {
+enum class AllocatorMode : U32 {
 	Query    = 0, // Query allocator's capabilities
 	Alloc    = 1, // Allocate a chunk of memory
 	Resize   = 2, // Resize an allocation in-place
@@ -377,7 +377,7 @@ enum class AllocatorCapability : U32 {
 // Memory allocator method
 using AllocatorFunc = void* (*) (
 	void* impl,
-	AllocatorOp op,
+	AllocatorMode op,
 	void* old_ptr,
 	Size old_size,
 	Size size,
@@ -395,7 +395,7 @@ void* mem_alloc(Allocator a, Size nbytes, Size align);
 
 void* mem_resize(Allocator a, void* ptr, Size new_size);
 
-void mem_free(Allocator a, void* ptr, Size old_size);
+void mem_free(Allocator a, void* ptr, Size old_size, Size align);
 
 void* mem_realloc(Allocator a, void* ptr, Size old_size, Size new_size, Size align);
 
@@ -425,7 +425,7 @@ void destroy(Allocator a, Slice<T> s){
 
 template<typename T>
 void destroy(Allocator a, String s){
-	mem_free(a, raw_data(s), sizeof(T) * len(s));
+	mem_free(a, raw_data(s), sizeof(T) * len(s), alignof(T));
 }
 
 //// Virtual Memory ///////////////////////////////////////////////////////////
@@ -630,6 +630,7 @@ U32 map_hash_func_raw(Byte const * data, Size nbytes){
 		hash = hash * prime;
 	}
 
+	hash = max<U32>(hash, 1);
 	return hash;
 }
 
@@ -637,6 +638,7 @@ template<typename K, typename V>
 struct MapSlot {
 	K key;
 	V value;
+	U32 hash;
 	MapSlot* next;
 };
 
@@ -661,6 +663,22 @@ Map<K, V> map_create(Allocator allocator, Size capacity){
 	return m;
 }
 
+template<typename K, typename V>
+void destroy(Map<K, V>* map){
+	constexpr Size slot_size = sizeof(MapSlot<K, V>);
+	constexpr Size slot_align = alignof(MapSlot<K, V>);
+	for(Size i = 0; i < map->capacity; i++){
+		auto head = &map->base_slots[i];
+		MapSlot<K, V>* next = nullptr;
+
+		for(MapSlot<K, V>* slot = head; slot != nullptr; slot = next){
+			next = slot->next;
+			// mem_free(map->allocator, (Byte*)slot, slot_size, slot_align);
+		}
+	}
+	mem_free(map->allocator, (Byte*)map->base_slots, slot_size * map->capacity, slot_align);
+}
+
 template<typename K, typename V, typename PK = K>
 bool set(Map<K, V>* map, PK key, V val){
 	auto map_key = K(key);
@@ -670,15 +688,19 @@ bool set(Map<K, V>* map, PK key, V val){
 	U32 hash = map_hash_func_raw(data, nbytes);
 	U32 pos = hash & (U32(map->capacity) - 1); // Fast modulo for powers of 2
 
-	if(map->base_slots[pos].next == nullptr){
-		map->base_slots[pos].key = map_key;
+	if(map->base_slots[pos].hash == 0){
+		map->base_slots[pos].key   = map_key;
 		map->base_slots[pos].value = val;
+		map->base_slots[pos].hash  = hash;
 	}
 	else {
 		panic("Collision");
 	}
 	return true;
 }
+
+//// Heap Allocator (LibC) ////////////////////////////////////////////////////
+Allocator heap_allocator();
 
 //// String Utilities /////////////////////////////////////////////////////////
 String str_trim(String s, String cutset);

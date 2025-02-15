@@ -14,23 +14,23 @@
 #endif
 
 void* mem_alloc(Allocator a, Size nbytes, Size align){
-	return a.func(a.data, AllocatorOp::Alloc, nullptr, 0, nbytes, align, nullptr);
+	return a.func(a.data, AllocatorMode::Alloc, nullptr, 0, nbytes, align, nullptr);
 }
 
 void* mem_resize(Allocator a, void* ptr, Size new_size){
-	return a.func(a.data, AllocatorOp::Resize, ptr, 0, new_size, 0, nullptr);
+	return a.func(a.data, AllocatorMode::Resize, ptr, 0, new_size, 0, nullptr);
 }
 
 void* mem_realloc(Allocator a, void* ptr, Size old_size, Size new_size, Size align){
-	return a.func(a.data, AllocatorOp::Realloc, ptr, old_size, new_size, align, nullptr);
+	return a.func(a.data, AllocatorMode::Realloc, ptr, old_size, new_size, align, nullptr);
 }
 
-void mem_free(Allocator a, void* ptr, Size old_size){
-	a.func(a.data, AllocatorOp::Realloc, ptr, old_size, 0, 0, nullptr);
+void mem_free(Allocator a, void* ptr, Size old_size, Size align){
+	a.func(a.data, AllocatorMode::Free, ptr, old_size, 0, align, nullptr);
 }
 
 void mem_free_all(Allocator a){
-	a.func(a.data, AllocatorOp::FreeAll, 0, 0, 0, 0, nullptr);
+	a.func(a.data, AllocatorMode::FreeAll, 0, 0, 0, 0, nullptr);
 }
 
 void mem_set(void* p, Byte val, Size count){

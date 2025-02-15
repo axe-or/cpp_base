@@ -34,4 +34,5 @@ std::ostream& operator<<(std::ostream& os, Slice<T> s){
 	return os;
 }
 
+
 #endif /* Include guard */

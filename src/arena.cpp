@@ -3,7 +3,7 @@
 static
 void* arena_allocator_func(
 	void* impl,
-	AllocatorOp op,
+	AllocatorMode op,
 	void* old_ptr,
 	Size old_size,
 	Size size,
@@ -12,7 +12,7 @@ void* arena_allocator_func(
 ){
 
 	auto arena = (Arena*)impl;
-	using M = AllocatorOp;
+	using M = AllocatorMode;
 	using C = AllocatorCapability;
 
 	switch (op) {
