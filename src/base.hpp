@@ -618,7 +618,7 @@ void remove(DynamicArray<T>* arr, Size idx){
 
 //// Map //////////////////////////////////////////////////////////////////////
 static inline
-U64 map_hash_func_raw(Byte const * data, Size nbytes){
+U64 map_hash_fnv64(Byte const * data, Size nbytes){
 	constexpr U64 prime = 0x100000001b3ull;
 	constexpr U64 offset_basis = 0xcbf29ce484222325ull;
 
@@ -628,11 +628,6 @@ U64 map_hash_func_raw(Byte const * data, Size nbytes){
 		hash = hash ^ b;
 		hash = hash * prime;
 	}
-
-	// Shuffle hi-lo bits
-	U64 hi = hash >> (64 - 8);
-	U64 lo = hash << (64 - 8);
-	hash = hash ^ (hi | lo);
 
 	return hash | U64(hash == 0);
 }
@@ -654,7 +649,7 @@ struct Map {
 
 template<typename K, typename V>
 Map<K, V> map_create(Allocator allocator, Size capacity){
-	ensure((capacity & (capacity - 1)) == 0, "Capacity must be a power of 2 minus 1");
+	ensure((capacity & (capacity - 1)) == 0, "Capacity must be a power of 2");
 	Map<K, V> m;
 	auto base_slots = mem_alloc(allocator, capacity * sizeof(MapSlot<K, V>), alignof(MapSlot<K, V>));
 	if(!base_slots){ return m; }
@@ -690,10 +685,10 @@ template<typename K, typename V, typename PK = K>
 bool map_set(Map<K, V>* map, PK key, V val){
 	auto map_key = K(key);
 
-	auto data = (Byte const*)&map_key;
+	auto data   = (Byte const*)&map_key;
 	Size nbytes = sizeof(K);
-	auto hash = map_hash_func_raw(data, nbytes);
-	Size pos = Size(hash & (map->capacity - 1));
+	auto hash   = map_hash_fnv64(data, nbytes);
+	Size pos    = Size(hash & (map->capacity - 1));
 
 	if(map->base_slots[pos].hash == 0){
 		map->base_slots[pos].key   = map_key;
