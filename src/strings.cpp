@@ -20,8 +20,20 @@ Utf8Iterator str_iterator_reversed(String s) {
 
 String str_clone(String s, Allocator a){
 	auto buf = make<Byte>(a, len(s) + 1);
+	[[unlikely]] if(len(buf) == 0){ return ""; }
 	buf[len(buf) - 1] = 0;
 	mem_copy_no_overlap(raw_data(buf), raw_data(s), len(s));
+	return string_from_bytes(slice_left(buf, len(buf) - 1));
+}
+
+[[nodiscard]]
+String str_concat(String s0, String s1, Allocator a){
+	auto buf = make<Byte>(a, len(s0) + len(s1) + 1);
+	[[unlikely]] if(len(buf) == 0){ return ""; }
+	auto data = raw_data(buf);
+	mem_copy_no_overlap(&data[0], raw_data(s0), len(s0));
+	mem_copy_no_overlap(&data[len(s0)], raw_data(s1), len(s1));
+	buf[len(buf) - 1] = 0;
 	return string_from_bytes(slice_left(buf, len(buf) - 1));
 }
 

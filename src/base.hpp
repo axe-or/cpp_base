@@ -410,7 +410,7 @@ T* make(Allocator a){
 template<typename T> [[nodiscard]]
 Slice<T> make(Allocator a, Size elems){
 	T* p = (T*)mem_alloc(a, sizeof(T) * elems, alignof(T));
-	return slice<T>(p, elems);
+	return slice<T>(p, p == nullptr ? 0 : elems);
 }
 
 template<typename T>
@@ -617,21 +617,24 @@ void remove(DynamicArray<T>* arr, Size idx){
 }
 
 //// Map //////////////////////////////////////////////////////////////////////
-
 static inline
-U32 map_hash_func_raw(Byte const * data, Size nbytes){
-	constexpr U32 prime = 0x01000193;
-	constexpr U32 offset_basis = 0x811c9dc5;
+U64 map_hash_func_raw(Byte const * data, Size nbytes){
+	constexpr U64 prime = 0x100000001b3ull;
+	constexpr U64 offset_basis = 0xcbf29ce484222325ull;
 
-	U32 hash = offset_basis;
+	U64 hash = offset_basis;
 	for(Size i = 0; i < nbytes; i ++){
-		Byte b = data[i];
+		auto b = U64(data[i]);
 		hash = hash ^ b;
 		hash = hash * prime;
 	}
 
-	hash = max<U32>(hash, 1);
-	return hash;
+	// Shuffle hi-lo bits
+	U64 hi = hash >> (64 - 8);
+	U64 lo = hash << (64 - 8);
+	hash = hash ^ (hi | lo);
+
+	return hash | U64(hash == 0);
 }
 
 template<typename K, typename V>
@@ -651,7 +654,7 @@ struct Map {
 
 template<typename K, typename V>
 Map<K, V> map_create(Allocator allocator, Size capacity){
-	ensure((capacity & (capacity - 1)) == 0, "Capacity must be a power of 2");
+	ensure((capacity & (capacity - 1)) == 0, "Capacity must be a power of 2 minus 1");
 	Map<K, V> m;
 	auto base_slots = mem_alloc(allocator, capacity * sizeof(MapSlot<K, V>), alignof(MapSlot<K, V>));
 	if(!base_slots){ return m; }
@@ -668,25 +671,29 @@ void destroy(Map<K, V>* map){
 	constexpr Size slot_size = sizeof(MapSlot<K, V>);
 	constexpr Size slot_align = alignof(MapSlot<K, V>);
 	for(Size i = 0; i < map->capacity; i++){
-		auto head = &map->base_slots[i];
 		MapSlot<K, V>* next = nullptr;
-
-		for(MapSlot<K, V>* slot = head; slot != nullptr; slot = next){
+		for(MapSlot<K, V>* slot = map->base_slots[i].next; slot != nullptr; slot = next){
 			next = slot->next;
-			// mem_free(map->allocator, (Byte*)slot, slot_size, slot_align);
+			mem_free(map->allocator, (Byte*)slot, slot_size, slot_align);
 		}
 	}
+
 	mem_free(map->allocator, (Byte*)map->base_slots, slot_size * map->capacity, slot_align);
 }
 
 template<typename K, typename V, typename PK = K>
-bool set(Map<K, V>* map, PK key, V val){
+Pair<V, bool> map_get(Map<K, V>* map, PK key){
+	auto map_key = K(key);
+}
+
+template<typename K, typename V, typename PK = K>
+bool map_set(Map<K, V>* map, PK key, V val){
 	auto map_key = K(key);
 
 	auto data = (Byte const*)&map_key;
 	Size nbytes = sizeof(K);
-	U32 hash = map_hash_func_raw(data, nbytes);
-	U32 pos = hash & (U32(map->capacity) - 1); // Fast modulo for powers of 2
+	auto hash = map_hash_func_raw(data, nbytes);
+	Size pos = Size(hash & (map->capacity - 1));
 
 	if(map->base_slots[pos].hash == 0){
 		map->base_slots[pos].key   = map_key;
@@ -694,7 +701,17 @@ bool set(Map<K, V>* map, PK key, V val){
 		map->base_slots[pos].hash  = hash;
 	}
 	else {
-		panic("Collision");
+		MapSlot<K, V>* new_slot = make<MapSlot<K, V>>(map->allocator);
+		if(new_slot == nullptr){
+			return false;
+		}
+
+		*new_slot = map->base_slots[pos];
+
+		map->base_slots[pos].key   = map_key;
+		map->base_slots[pos].value = val;
+		map->base_slots[pos].hash  = hash;
+		map->base_slots[pos].next  = new_slot;
 	}
 	return true;
 }
@@ -719,6 +736,22 @@ Size str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
 String str_clone(String s, Allocator allocator);
+
+[[nodiscard]]
+String str_concat(String s0, String s1, Allocator allocator);
+
+//// String Builder ///////////////////////////////////////////////////////////
+// struct StringBuilder {
+// 	DynamicArray<Byte> buffer;
+// };
+//
+// StringBuilder str_builder_create(Allocator allocator);
+//
+// void str_append(StringBuilder* sb, String v);
+// void str_append(StringBuilder* sb, Rune v);
+// void str_append(StringBuilder* sb, I64 v);
+// void str_append(StringBuilder* sb, F64 v);
+// void str_append(StringBuilder* sb, bool v);
 
 //// SIMD /////////////////////////////////////////////////////////////////////
 namespace simd {
