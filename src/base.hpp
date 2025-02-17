@@ -617,6 +617,8 @@ void remove(DynamicArray<T>* arr, Size idx){
 }
 
 //// Map //////////////////////////////////////////////////////////////////////
+#include "debug_print.cpp"
+
 static inline
 U64 map_hash_fnv64(Byte const * data, Size nbytes){
 	constexpr U64 prime = 0x100000001b3ull;
@@ -636,7 +638,7 @@ template<typename K, typename V>
 struct MapSlot {
 	K key;
 	V value;
-	U32 hash;
+	U64 hash;
 	MapSlot* next;
 };
 
@@ -676,22 +678,44 @@ void destroy(Map<K, V>* map){
 	mem_free(map->allocator, (Byte*)map->base_slots, slot_size * map->capacity, slot_align);
 }
 
-template<typename K, typename V, typename PK = K>
-Pair<V, bool> map_get(Map<K, V>* map, PK key){
-	auto map_key = K(key);
+template<typename K, typename V>
+Pair<Size, U64> map_slot_offset(Map<K, V>* map, K key){
+	auto data   = (Byte const*)&key;
+	auto hash   = map_hash_fnv64(data, sizeof(key));
+	Size pos    = Size(hash & (map->capacity - 1));
+	return {pos, hash};
+}
+
+template<typename V>
+Pair<Size, U64> map_slot_offset(Map<String, V>* map, String key){
+	auto hash   = map_hash_fnv64(raw_data(key), len(key));
+	Size pos    = Size(hash & (map->capacity - 1));
+	return {pos, hash};
 }
 
 template<typename K, typename V, typename PK = K>
-bool map_set(Map<K, V>* map, PK key, V val){
+Pair<V, bool> map_get(Map<K, V>* map, PK key){
 	auto map_key = K(key);
+	auto [pos, hash] = map_slot_offset(map, map_key);
 
-	auto data   = (Byte const*)&map_key;
-	Size nbytes = sizeof(K);
-	auto hash   = map_hash_fnv64(data, nbytes);
-	Size pos    = Size(hash & (map->capacity - 1));
+	for(auto slot = &map->base_slots[pos]; slot != nullptr; slot = slot->next){
+		bool hit = (slot->hash == hash) && (slot->key == map_key);
+		if(hit){
+			return {slot->value, true};
+		}
+	}
+	return {V{}, false};
+}
+
+template<typename K, typename V, typename PK = K, typename PV = V>
+bool map_set(Map<K, V>* map, PK map_key, PV map_val){
+	auto key = static_cast<K>(map_key);
+	auto val = static_cast<V>(map_val);
+
+	auto [pos, hash] = map_slot_offset(map, key);
 
 	if(map->base_slots[pos].hash == 0){
-		map->base_slots[pos].key   = map_key;
+		map->base_slots[pos].key   = key;
 		map->base_slots[pos].value = val;
 		map->base_slots[pos].hash  = hash;
 	}
@@ -703,7 +727,7 @@ bool map_set(Map<K, V>* map, PK key, V val){
 
 		*new_slot = map->base_slots[pos];
 
-		map->base_slots[pos].key   = map_key;
+		map->base_slots[pos].key   = key;
 		map->base_slots[pos].value = val;
 		map->base_slots[pos].hash  = hash;
 		map->base_slots[pos].next  = new_slot;

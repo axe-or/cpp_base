@@ -1,37 +1,20 @@
 #include "base.hpp"
-#include "debug_print.cpp"
+// #include "debug_print.cpp"
 
 template<typename K, typename V>
 std::ostream& operator<<(std::ostream& os, Map<K, V> map){
-	// for(Size i = 0; i < map.capacity; i ++){
-	// 	auto head = &map.base_slots[i];
-	//
-	// 	os << "[" << i << "]\t";
-	// 	if(head->hash == 0){
-	// 		os << "_\n";
-	// 	}
-	// 	else {
-	// 		for(MapSlot<K, V>* slot = head; slot != nullptr; slot = slot->next){
-	// 			os << slot->key << " = " << slot->value << "(" << slot->hash << ")   ";
-	// 		}
-	// 		os << "\n";
-	// 	}
-	// }
-
-	os << "bucket,count\n";
 	for(Size i = 0; i < map.capacity; i ++){
 		auto head = &map.base_slots[i];
 
-		os << i << ",";
+		os << "[" << i << "]\t";
 		if(head->hash == 0){
-			os << "0\n";
+			os << "_\n";
 		}
 		else {
-			Size count = 0;
 			for(MapSlot<K, V>* slot = head; slot != nullptr; slot = slot->next){
-				count += 1;
+				os << slot->key << " = " << slot->value << "(" << std::hex << slot->hash << ")   ";
 			}
-			os << count << "\n";
+			os << "\n";
 		}
 	}
 	return os;
@@ -40,10 +23,13 @@ std::ostream& operator<<(std::ostream& os, Map<K, V> map){
 int main(){
 	auto allocator = heap_allocator();
 
-	auto map = map_create<String, I32>(allocator, 1024);
+	auto map = map_create<String, I32>(allocator, 8);
+	auto map2 = map_create<I32, String>(allocator, 8);
 	defer(destroy(&map));
+	defer(destroy(&map2));
 
 	print(map);
+	print(map2);
 
 	return 0;
 }
