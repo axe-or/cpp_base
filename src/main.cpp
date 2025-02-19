@@ -20,6 +20,17 @@ std::ostream& operator<<(std::ostream& os, Map<K, V> map){
 	return os;
 }
 
+template<typename T>
+std::ostream& operator<<(std::ostream& os, Option<T> v){
+	if(!v.ok()){
+		os << "Option(nil)";
+	}
+	else {
+		os << "Option(" << v.unwrap_unchecked() << ")";
+	}
+	return os;
+}
+
 int main(){
 	auto allocator = heap_allocator();
 
@@ -30,7 +41,13 @@ int main(){
 
 	print(map);
 	print(map2);
+	map_set(&map2, 69, "CU");
 
+	auto e = Option<I32>{1};
+	print(e);
+	e.clear();
+	print(e.or_else(69u));
+	e = 40;
 	return 0;
 }
 

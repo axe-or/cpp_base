@@ -2,5 +2,5 @@
 -Wall
 -Wextra
 -Wno-unused-label
--std=c++20
+-std=c++17
 -DBASE_IMPLEMENTATION

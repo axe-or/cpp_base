@@ -116,6 +116,43 @@ void ensure(bool pred, char const * msg);
 
 void bounds_check_assert(bool pred, char const * msg);
 
+
+template<typename T>
+struct Option {
+	T _value;
+	bool _has_value = false;
+
+	T unwrap(){
+		if(_has_value){
+			return _value;
+		}
+		panic("Attempt to unwrap a null option");
+	}
+
+	T unwrap_unchecked(){
+		return _value;
+	}
+
+	bool ok() const { return _has_value; }
+
+	template<typename U>
+	T or_else(U alt){
+		if(_has_value){
+			return _value;
+		}
+		return static_cast<T>(alt);
+	}
+
+	void clear(){
+		_has_value = false;
+	}
+
+	Option() : _has_value{false}{}
+
+	// Implicit conversion
+	Option(T val) : _value{val}, _has_value{true} {}
+};
+
 template<typename T>
 struct Slice {
 	T*   _data   = nullptr;
@@ -349,7 +386,6 @@ String slice_left(String s, Size idx){
 Utf8Iterator str_iterator(String s);
 
 Utf8Iterator str_iterator_reversed(String s);
-
 
 //// Memory ///////////////////////////////////////////////////////////////////
 constexpr U32 mem_protection_none    = 0;
