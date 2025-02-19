@@ -180,51 +180,40 @@ struct Slice {
 		return s;
 	}
 
-	Slice(){}
+	// Get the sub-slice of interval a..b (end exclusive)
+	Slice<T> slice(Size from, Size to){
+		bounds_check_assert(
+				from >= 0 && from < _length &&
+				to >= 0 && to <= _length &&
+				from <= to,
+				"Index to sub-slice is out of bounds");
+		Slice<T> res;
+		res._length = to - from;
+		res._data = &_data[from];
+		return res;
+	}
 
+	// Get the sub-slice of elements after index (inclusive)
+	Slice<T> slice_right(Size idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
+		auto res = Slice<T>(&_data[idx], _length - idx);
+		return res;
+	}
+
+	// Get the sub-slice of elements before index (exclusive)
+	Slice<T> slice_left(Size idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
+		auto res = Slice(_data, idx);
+		return res;
+	}
+
+	Slice(){}
 	explicit Slice(T* data, Size len) : _data{data}, _length{len} {}
 
 	// Accessors
-	friend Size len(Slice<T> s){ return s._length; }
-	friend T* raw_data(Slice<T> s){ return s._data; }
+	Size len() const { return _length; }
+	T* raw_data() const { return _data; }
 };
-
-template<typename T>
-Slice<T> slice(T* data, Size len){
-	bounds_check_assert(len >= 0, "Negative length value");
-	auto s = Slice<T>(data, len);
-	return s;
-}
-
-// Get the sub-slice of interval a..b (end exclusive)
-template<typename T>
-Slice<T> slice(Slice<T> s, Size from, Size to){
-	bounds_check_assert(
-		from >= 0 && from < s._length &&
-		to >= 0 && to <= s._length &&
-		from <= to,
-		"Index to sub-slice is out of bounds");
-	Slice<T> res;
-	res._length = to - from;
-	res._data = &s._data[from];
-	return res;
-}
-
-// Get the sub-slice of elements after index (inclusive)
-template<typename T>
-Slice<T> slice_right(Slice<T> s, Size idx){
-	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
-	auto res = Slice<T>(&raw_data(s)[idx], len(s) - idx);
-	return res;
-}
-
-// Get the sub-slice of elements before index (exclusive)
-template<typename T>
-Slice<T> slice_left(Slice<T> s, Size idx){
-	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
-	auto res = Slice(raw_data(s), idx);
-	return res;
-}
 
 constexpr Size mem_KiB = 1024ll;
 constexpr Size mem_MiB = 1024ll * 1024ll;
@@ -312,7 +301,6 @@ struct String {
 private:
 	Byte const * _data = nullptr;
 	Size _length = 0;
-
 public:
 
 	// Implict conversion, this is one of the very vew places an implicit
@@ -335,6 +323,19 @@ public:
 		return String(&_data[from], to - from);
 	}
 
+	String slice_right(Size idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
+		auto res = String(&_data[idx], _length - idx);
+		return res;
+	}
+
+	String slice_left(Size idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
+		auto res = String(_data, idx);
+		return res;
+	}
+
+
 	bool operator==(String lhs) const noexcept {
 		if(lhs._length != _length){ return false; }
 		return mem_compare(_data, lhs._data, _length) == 0;
@@ -346,12 +347,8 @@ public:
 	}
 
 	// Accessors
-	friend Size len(String s){
-		return s._length;
-	}
-	friend Byte* raw_data(String s){
-		return (Byte*)s._data;
-	}
+	Size len() const { return _length; }
+	Byte* raw_data() const { return (Byte*)_data; }
 };
 
 static inline
@@ -366,21 +363,7 @@ String string_from_cstring(char const* data, Size start, Size length){
 
 static inline
 String string_from_bytes(Slice<Byte> buf){
-	return String(raw_data(buf), len(buf));
-}
-
-static inline
-String slice_right(String s, Size idx){
-	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
-	auto res = String(&raw_data(s)[idx], len(s) - idx);
-	return res;
-}
-
-static inline
-String slice_left(String s, Size idx){
-	bounds_check_assert(idx >= 0 && idx < len(s), "Index to sub-slice is out of bounds");
-	auto res = String(raw_data(s), idx);
-	return res;
+	return String(buf.raw_data(), buf.len());
 }
 
 Utf8Iterator str_iterator(String s);
@@ -446,7 +429,7 @@ T* make(Allocator a){
 template<typename T> [[nodiscard]]
 Slice<T> make(Allocator a, Size elems){
 	T* p = (T*)mem_alloc(a, sizeof(T) * elems, alignof(T));
-	return slice<T>(p, p == nullptr ? 0 : elems);
+	return Slice<T>(p, p == nullptr ? 0 : elems);
 }
 
 template<typename T>
@@ -456,12 +439,12 @@ void destroy(Allocator a, T* obj){
 
 template<typename T>
 void destroy(Allocator a, Slice<T> s){
-	mem_free(a, raw_data(s), sizeof(T) * len(s));
+	mem_free(a, s.raw_data(), sizeof(T) * s.len());
 }
 
 template<typename T>
 void destroy(Allocator a, String s){
-	mem_free(a, raw_data(s), sizeof(T) * len(s), alignof(T));
+	mem_free(a, s.raw_data(), sizeof(T) * s.len(), alignof(T));
 }
 
 //// Virtual Memory ///////////////////////////////////////////////////////////

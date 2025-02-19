@@ -18,7 +18,7 @@ void print(T a, Args&& ... args){
 
 static inline
 std::ostream& operator<<(std::ostream& os, String s){
-	os.write((char const*)raw_data(s), len(s));
+	os.write((char const*)s.raw_data(), s.len());
 	return os;
 }
 
@@ -26,7 +26,7 @@ std::ostream& operator<<(std::ostream& os, String s){
 template<typename T>
 std::ostream& operator<<(std::ostream& os, Slice<T> s){
 	os << '[';
-	for(Size i = 0; i < len(s); i++){
+	for(Size i = 0; i < s.len(); i++){
 		if(i > 0) os << ' ';
 		os << s[i];
 	}

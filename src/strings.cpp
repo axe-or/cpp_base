@@ -4,7 +4,7 @@ constexpr Size max_cutset_len = 64;
 
 Utf8Iterator str_iterator(String s) {
 	Utf8Iterator it = {
-		.data = slice(raw_data(s), len(s)),
+		.data = Slice(s.raw_data(), s.len()),
 		.current = 0,
 	};
 	return it;
@@ -12,29 +12,30 @@ Utf8Iterator str_iterator(String s) {
 
 Utf8Iterator str_iterator_reversed(String s) {
 	Utf8Iterator it = {
-		.data = slice(raw_data(s), len(s)),
-		.current = len(s),
+		.data = Slice(s.raw_data(), s.len()),
+		.current = s.len(),
 	};
 	return it;
 }
 
 String str_clone(String s, Allocator a){
-	auto buf = make<Byte>(a, len(s) + 1);
-	[[unlikely]] if(len(buf) == 0){ return ""; }
-	buf[len(buf) - 1] = 0;
-	mem_copy_no_overlap(raw_data(buf), raw_data(s), len(s));
-	return string_from_bytes(slice_left(buf, len(buf) - 1));
+	auto buf = make<Byte>(a, s.len() + 1);
+	[[unlikely]] if(buf.len() == 0){ return ""; }
+	buf[buf.len() - 1] = 0;
+	mem_copy_no_overlap(buf.raw_data(), s.raw_data(), s.len());
+	return string_from_bytes(buf.slice_left(buf.len() - 1));
 }
 
 [[nodiscard]]
 String str_concat(String s0, String s1, Allocator a){
-	auto buf = make<Byte>(a, len(s0) + len(s1) + 1);
-	[[unlikely]] if(len(buf) == 0){ return ""; }
-	auto data = raw_data(buf);
-	mem_copy_no_overlap(&data[0], raw_data(s0), len(s0));
-	mem_copy_no_overlap(&data[len(s0)], raw_data(s1), len(s1));
-	buf[len(buf) - 1] = 0;
-	return string_from_bytes(slice_left(buf, len(buf) - 1));
+	auto buf = make<Byte>(a, s0.len() + s1.len() + 1);
+
+	[[unlikely]] if(buf.len() == 0){ return ""; }
+	auto data = buf.raw_data();
+	mem_copy_no_overlap(&data[0], s0.raw_data(), s0.len());
+	mem_copy_no_overlap(&data[s0.len()], s1.raw_data(), s1.len());
+	buf[buf.len() - 1] = 0;
+	return string_from_bytes(buf.slice_left(buf.len() - 1));
 }
 
 Size str_rune_count(String s) {
@@ -47,16 +48,16 @@ Size str_rune_count(String s) {
 }
 
 bool str_starts_with(String s, String prefix){
-	if(len(prefix) == 0){ return true; }
-	if(len(prefix) > len(s)){ return false; }
-	I32 cmp = mem_compare(raw_data(s), raw_data(prefix), len(prefix));
+	if(prefix.len() == 0){ return true; }
+	if(prefix.len() > s.len()){ return false; }
+	I32 cmp = mem_compare(s.raw_data(), prefix.raw_data(), prefix.len());
 	return cmp == 0;
 }
 
 bool str_ends_with(String s, String suffix){
-	if(len(suffix) == 0){ return true; }
-	if(len(suffix) > len(s)){ return false; }
-	I32 cmp = mem_compare(raw_data(s) + len(s) - len(suffix), raw_data(suffix), len(suffix));
+	if(suffix.len() == 0){ return true; }
+	if(suffix.len() > s.len()){ return false; }
+	I32 cmp = mem_compare(s.raw_data() + s.len() - suffix.len(), suffix.raw_data(), suffix.len());
 	return cmp == 0;
 }
 
@@ -66,7 +67,7 @@ String str_trim(String s, String cutset) {
 }
 
 String str_trim_leading(String s, String cutset) {
-	debug_assert(len(cutset) <= max_cutset_len, "Cutset string exceeds max_cutset_len");
+	debug_assert(cutset.len() <= max_cutset_len, "Cutset string exceeds max_cutset_len");
 
 	Rune set[max_cutset_len] = {0};
 	Size set_len = 0;
@@ -107,15 +108,15 @@ String str_trim_leading(String s, String cutset) {
 		}
 	}
 
-	return slice_right(s, cut_after);
+	return s.slice_right(cut_after);
 }
 
 String str_trim_trailing(String s, String cutset) {
-	debug_assert(len(cutset) <= max_cutset_len, "Cutset string exceeds max_cutset_len");
+	debug_assert(cutset.len() <= max_cutset_len, "Cutset string exceeds max_cutset_len");
 
 	Rune set[max_cutset_len] = {0};
 	Size set_len = 0;
-	Size cut_until = len(s);
+	Size cut_until = s.len();
 
 	/* Decode cutset */ {
 		Rune c; I32 n;
@@ -152,21 +153,21 @@ String str_trim_trailing(String s, String cutset) {
 		}
 	}
 
-	return slice_left(s, cut_until);
+	return s.slice_left(cut_until);
 }
 
 Size find(String s, String pattern, Size start){
-	bounds_check_assert(start < len(s), "Cannot begin searching after string length");
-	if(len(pattern) > len(s)){ return -1; }
-	else if(len(pattern) == 0){ return start; }
+	bounds_check_assert(start < s.len(), "Cannot begin searching after string length");
+	if(pattern.len() > s.len()){ return -1; }
+	else if(pattern.len() == 0){ return start; }
 
-	auto source_p  = raw_data(s);
-	auto pattern_p = raw_data(pattern);
+	auto source_p  = s.raw_data();
+	auto pattern_p = pattern.raw_data();
 
-	auto length = len(s) - len(pattern);
+	auto length = s.len() - pattern.len();
 
 	for(Size i = start; i < length; i++){
-		if(mem_compare(&source_p[i], pattern_p, len(pattern)) == 0){
+		if(mem_compare(&source_p[i], pattern_p, pattern.len()) == 0){
 			return i;
 		}
 	}

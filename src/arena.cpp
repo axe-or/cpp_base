@@ -50,9 +50,9 @@ Allocator arena_allocator(Arena* arena){
 
 Arena arena_from_buffer(Slice<U8> buf){
 	PageBlock data = {
-		.reserved = len(buf),
-		.commited = len(buf),
-		.pointer = raw_data(buf),
+		.reserved = buf.len(),
+		.commited = buf.len(),
+		.pointer = buf.raw_data(),
 	};
 
 	Arena a = {

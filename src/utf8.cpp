@@ -66,8 +66,8 @@ constexpr Utf8DecodeResult DECODE_ERROR = { .codepoint = ERROR, .len = 0 };
 
 Utf8DecodeResult utf8_decode(Slice<Byte> s){
 	Utf8DecodeResult res = {};
-	Byte* buf = raw_data(s);
-	Size slen = len(s);
+	Byte* buf = s.raw_data();
+	Size slen = s.len();
 
 	if(slen <= 0){ return DECODE_ERROR; }
 
@@ -117,9 +117,9 @@ Utf8DecodeResult utf8_decode(Slice<Byte> s){
 }
 
 bool iter_next(Utf8Iterator* it, Rune* r, I32* n){
-	if(it->current >= len(it->data)){ return 0; }
+	if(it->current >= it->data.len()){ return 0; }
 
-	Utf8DecodeResult res = utf8_decode(slice_right(it->data, it->current));
+	Utf8DecodeResult res = utf8_decode(it->data.slice_right(it->current));
 	*r = res.codepoint;
 	*n = res.len;
 
@@ -140,7 +140,7 @@ bool iter_prev(Utf8Iterator* it, Rune* r, I32* len){
 		it->current -= 1;
 	}
 
-	Utf8DecodeResult res = utf8_decode(slice_right(it->data, it->current));
+	Utf8DecodeResult res = utf8_decode(it->data.slice_right(it->current));
 	*r = res.codepoint;
 	*len = res.len;
 	return true;
