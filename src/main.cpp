@@ -34,20 +34,31 @@ std::ostream& operator<<(std::ostream& os, Option<T> v){
 int main(){
 	auto allocator = heap_allocator();
 
-	auto map = map_create<String, I32>(allocator, 8);
-	auto map2 = map_create<I32, String>(allocator, 8);
-	defer(destroy(&map));
-	defer(destroy(&map2));
+	auto arr = DynamicArray<I32*>::make(allocator);
+	defer(arr.destroy());
+	I32 n = 0;
+	arr.append(&n);
+	arr.append(nullptr);
 
-	print(map);
-	print(map2);
-	map_set(&map2, 69, "CU");
+	print(arr.pop());
+	print(arr.pop());
+	print(arr.pop());
 
-	auto e = Option<I32>{1};
-	print(e);
-	e.clear();
-	print(e.or_else(69u));
-	e = 40;
+	print(arr.as_slice());
+	// auto map = map_create<String, I32>(allocator, 8);
+	// auto map2 = map_create<I32, String>(allocator, 8);
+	// defer(destroy(&map));
+	// defer(destroy(&map2));
+
+	// print(map);
+	// print(map2);
+	// map_set(&map2, 69, "CU");
+
+	// auto e = Option<I32>{1};
+	// print(e);
+	// e.clear();
+	// print(e.or_else(69u));
+	// e = 40;
 	return 0;
 }
 

@@ -116,7 +116,6 @@ void ensure(bool pred, char const * msg);
 
 void bounds_check_assert(bool pred, char const * msg);
 
-
 template<typename T>
 struct Option {
 	T _value;
@@ -151,6 +150,39 @@ struct Option {
 
 	// Implicit conversion
 	Option(T val) : _value{val}, _has_value{true} {}
+};
+
+template<typename T>
+struct Option<T*> {
+	T* _value;
+
+	T* unwrap(){
+		if(_value != nullptr){
+			return _value;
+		}
+		panic("Attempt to unwrap a null option");
+	}
+
+	T* unwrap_unchecked(){
+		return _value;
+	}
+
+	bool ok() const { return _value != nullptr; }
+
+	T* or_else(T* alt){
+		if(_value != nullptr){
+			return _value;
+		}
+		return alt;
+	}
+
+	void clear(){
+		_has_value = false;
+	}
+
+	Option() : _value{nullptr} {}
+
+	Option(T* p) : _value{p} {}
 };
 
 template<typename T>
@@ -534,106 +566,99 @@ struct DynamicArray {
 		return s;
 	}
 
-	// Accessors
-	friend Size len(DynamicArray<T> a){ return a._length; }
-	friend Size cap(DynamicArray<T> a){ return a._capacity; }
-	friend T* raw_data(DynamicArray<T> a){ return a._data; }
-	friend Allocator allocator_of(DynamicArray<T> a){ return a._allocator; }
-};
-
-template<typename T>
-void clear(DynamicArray<T>* arr){
-	arr->_length = 0;
-}
-
-template<typename T>
-void destroy(DynamicArray<T>* arr){
-	mem_free(arr->_allocator, arr->_data, arr->_length);
-}
-
-template<typename T>
-Slice<T> slice(DynamicArray<T> arr){
-	return slice(arr._data, arr._length);
-}
-
-template<typename T>
-DynamicArray<T> dynamic_array_create(Allocator alloc, Size initial_cap = 16){
-	DynamicArray<T> arr;
-	arr._capacity = initial_cap;
-	arr._length = 0;
-	arr._allocator = alloc;
-	arr._data = (T*)mem_alloc(alloc, initial_cap * sizeof(T), alignof(T));
-	return arr;
-}
-
-template<typename T, typename U = T>
-bool append(DynamicArray<T>* arr, U elem){
-	[[unlikely]] if(arr->_length >= arr->_capacity){
-		Size new_cap = mem_align_forward_size(arr->_length * 2, 16);
-		auto new_data = (T*)mem_realloc(
-				arr->_allocator,
-				arr->_data,
-				arr->_capacity * sizeof(T),
-				new_cap, alignof(T));
-		if(new_data == nullptr){
-			return false;
-		}
-		arr->_data = new_data;
+	void clear(){
+		_length = 0;
 	}
 
-	arr->_data[arr->_length] = static_cast<T>(elem);
-	arr->_length += 1;
-	return true;
-}
+	void destroy(){
+		mem_free(_allocator, _data, _capacity * sizeof(T), alignof(T));
+	}
 
-template<typename T>
-bool pop(DynamicArray<T>* arr){
-	if(arr->_length <= 0){ return false; }
-	arr->_length -= 1;
-	return true;
-}
+	Slice<T> as_slice(){
+		return Slice<T>(_data, _length);
+	}
 
-template<typename T, typename U = T>
-bool insert(DynamicArray<T>* arr, Size idx, U elem){
-	bounds_check_assert(idx >= 0 && idx <= arr->_length, "Out of bounds index to insert_swap");
-	if(idx == arr->_length){ return append(arr, elem); }
+	bool append(T elem){
+		[[unlikely]] if(_length >= _capacity){
+			Size new_cap = mem_align_forward_size(_length * 2, 16);
+			auto new_data = (T*)mem_realloc(
+					_allocator,
+					_data,
+					_capacity * sizeof(T),
+					new_cap, alignof(T));
+			if(new_data == nullptr){
+				return false;
+			}
+			_data = new_data;
+		}
+		_data[_length] = elem;
+		_length += 1;
+		return true;
+	}
 
-	bool ok = append(arr, elem);
-	if(!ok){ return false; }
+	Option<T> pop(){
+		if(_length <= 0){ return {}; }
+		_length -= 1;
+		auto v = _data[_length];
+		return v;
+	}
 
-	Size nbytes = sizeof(T) * (arr->_length - 1 - idx);
-	mem_copy(&arr->_data[idx + 1], &arr->_data[idx], nbytes);
-	arr->_data[idx] = elem;
-	return true;
-}
+	bool insert(Size idx, T elem){
+		bounds_check_assert(idx >= 0 && idx <= _length, "Out of bounds index to insert_swap");
+		if(idx == _length){ return append(this, elem); }
 
-template<typename T, typename U = T>
-bool insert_swap(DynamicArray<T>* arr, Size idx, U elem){
-	bounds_check_assert(idx >= 0 && idx <= arr->_length, "Out of bounds index to insert_swap");
-	if(idx == arr->_length){ return append(arr, elem); }
+		bool ok = append(this, elem);
+		if(!ok){ return false; }
 
-	bool ok = append(arr, arr->_data[idx]);
-	[[unlikely]] if(!ok){ return false; }
-	arr->_data[idx] = static_cast<T>(elem);
+		Size nbytes = sizeof(T) * (_length - 1 - idx);
+		mem_copy(&_data[idx + 1], &_data[idx], nbytes);
+		_data[idx] = elem;
+		return true;
+	}
 
-	return true;
-}
+	bool insert_swap(Size idx, T elem){
+		bounds_check_assert(idx >= 0 && idx <= _length, "Out of bounds index to insert_swap");
+		if(idx == _length){ return append(this, elem); }
 
-template<typename T>
-void remove_swap(DynamicArray<T>* arr, Size idx){
-	bounds_check_assert(idx >= 0 && idx < arr->_length, "Out of bounds index to remove_swap");
-	T last = arr->_data[arr->_length - 1];
-	arr->_data[idx] = last;
-	arr->_length -= 1;
-}
+		bool ok = append(this, _data[idx]);
+		[[unlikely]] if(!ok){ return false; }
+		_data[idx] = elem;
 
-template<typename T>
-void remove(DynamicArray<T>* arr, Size idx){
-	bounds_check_assert(idx >= 0 && idx < arr->_length, "Out of bounds index to remove");
-	Size nbytes = sizeof(T) * (arr->_length - idx + 1);
-	mem_copy(&arr->_data[idx], &arr->_data[idx+1], nbytes);
-	arr->_length -= 1;
-}
+		return true;
+	}
+
+	void remove_swap(Size idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Out of bounds index to remove_swap");
+		T last = _data[_length - 1];
+		_data[idx] = last;
+		_length -= 1;
+	}
+
+	void remove(Size idx){
+		bounds_check_assert(idx >= 0 && idx < _length, "Out of bounds index to remove");
+		Size nbytes = sizeof(T) * (_length - idx + 1);
+		mem_copy(&_data[idx], &_data[idx+1], nbytes);
+		_length -= 1;
+	}
+
+	static DynamicArray<T> make(Allocator alloc, Size initial_cap = 16){
+		DynamicArray<T> arr;
+		arr._capacity = initial_cap;
+		arr._length = 0;
+		arr._allocator = alloc;
+		arr._data = (T*)mem_alloc(alloc, initial_cap * sizeof(T), alignof(T));
+		return arr;
+	}
+
+
+	// Accessors
+	Size len() const { return _length; }
+	Size cap() const { return _capacity; }
+	T* raw_data() const { return _data; }
+	Allocator allocator() const { return _allocator; }
+};
+
+
 
 //// Map //////////////////////////////////////////////////////////////////////
 #include "debug_print.cpp"
