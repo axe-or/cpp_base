@@ -37,12 +37,16 @@ int main(){
 	auto arr = DynamicArray<I32*>::make(allocator);
 	defer(arr.destroy());
 	I32 n = 0;
+	print(sizeof(Option<U8>));
+	print(sizeof(Option<U8*>));
+
+	arr.append(&n);
+	arr.append(&n);
+	arr.append(&n);
 	arr.append(&n);
 	arr.append(nullptr);
 
-	print(arr.pop());
-	print(arr.pop());
-	print(arr.pop());
+	arr.remove_swap(0);
 
 	print(arr.as_slice());
 	// auto map = map_create<String, I32>(allocator, 8);

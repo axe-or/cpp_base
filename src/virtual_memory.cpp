@@ -1,6 +1,6 @@
 #include "base.hpp"
 
-PageBlock page_block_create(Size nbytes){
+PageBlock PageBlock::make(Size nbytes){
 	nbytes = mem_align_forward_size(nbytes, mem_page_size);
 	void* ptr = virtual_reserve(nbytes);
 	PageBlock blk = {
@@ -11,31 +11,31 @@ PageBlock page_block_create(Size nbytes){
 	return blk;
 }
 
-void page_block_destroy(PageBlock* b){
-	virtual_release(b->pointer, b->reserved);
+void PageBlock::destroy(){
+	virtual_release(pointer, reserved);
 }
 
-void* page_block_push(PageBlock* b, Size nbytes){
+void* PageBlock::push(Size nbytes){
 	nbytes = mem_align_forward_size(nbytes, mem_page_size);
-	U8* old_ptr = (U8*)b->pointer + b->commited;
+	U8* old_ptr = (U8*)pointer + commited;
 	void* new_ptr = virtual_commit(old_ptr, nbytes);
 
 	if(new_ptr == nullptr){
 		return nullptr; /* Memory error */
 	}
-	b->commited += nbytes;
+	commited += nbytes;
 	return old_ptr;
 }
 
-void page_block_pop(PageBlock* b, Size nbytes){
-	nbytes = clamp<Size>(0, nbytes, b->commited);
+void PageBlock::pop(Size nbytes){
+	nbytes = clamp<Size>(0, nbytes, commited);
 
-	Uintptr base = (Uintptr)b->pointer;
+	Uintptr base = (Uintptr)pointer;
 	// Free pages *after* this location
-	Uintptr free_after = base + (b->commited - nbytes);
+	Uintptr free_after = base + (commited - nbytes);
 	free_after = mem_align_forward_ptr(free_after, mem_page_size);
 
-	Size amount_to_free = (base + b->commited) - free_after;
+	Size amount_to_free = (base + commited) - free_after;
 	virtual_decommit((void*)free_after, amount_to_free);
-	b->commited -= amount_to_free;
+	commited -= amount_to_free;
 }

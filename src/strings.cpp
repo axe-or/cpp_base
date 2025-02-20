@@ -156,9 +156,9 @@ String str_trim_trailing(String s, String cutset) {
 	return s.slice_left(cut_until);
 }
 
-Size find(String s, String pattern, Size start){
+Option<Size> find(String s, String pattern, Size start){
 	bounds_check_assert(start < s.len(), "Cannot begin searching after string length");
-	if(pattern.len() > s.len()){ return -1; }
+	if(pattern.len() > s.len()){ return {}; }
 	else if(pattern.len() == 0){ return start; }
 
 	auto source_p  = s.raw_data();
@@ -172,5 +172,5 @@ Size find(String s, String pattern, Size start){
 		}
 	}
 
-	return -1;
+	return {};
 }

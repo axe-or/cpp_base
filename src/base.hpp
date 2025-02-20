@@ -152,6 +152,7 @@ struct Option {
 	Option(T val) : _value{val}, _has_value{true} {}
 };
 
+// Zero value optimization for pointers
 template<typename T>
 struct Option<T*> {
 	T* _value;
@@ -177,7 +178,7 @@ struct Option<T*> {
 	}
 
 	void clear(){
-		_has_value = false;
+		_value = nullptr;
 	}
 
 	Option() : _value{nullptr} {}
@@ -486,15 +487,15 @@ struct PageBlock {
 	Size reserved;
 	Size commited;
 	void* pointer;
+
+	void* push(Size nbytes);
+
+	void pop(Size nbytes);
+
+	void destroy();
+
+	static PageBlock make(Size nbytes);
 };
-
-PageBlock page_block_create(Size nbytes);
-
-void page_block_destroy(PageBlock* blk);
-
-void* page_block_push(PageBlock* blk, Size nbytes);
-
-void page_block_pop(PageBlock* blk, Size nbytes);
 
 void* virtual_reserve(Size nbytes);
 
@@ -596,8 +597,8 @@ struct DynamicArray {
 		return true;
 	}
 
-	Option<T> pop(){
-		if(_length <= 0){ return {}; }
+	bool pop(){
+		if(_length <= 0){ return false; }
 		_length -= 1;
 		auto v = _data[_length];
 		return v;
@@ -650,15 +651,12 @@ struct DynamicArray {
 		return arr;
 	}
 
-
 	// Accessors
 	Size len() const { return _length; }
 	Size cap() const { return _capacity; }
 	T* raw_data() const { return _data; }
 	Allocator allocator() const { return _allocator; }
 };
-
-
 
 //// Map //////////////////////////////////////////////////////////////////////
 #include "debug_print.cpp"
@@ -732,7 +730,7 @@ Pair<Size, U64> map_slot_offset(Map<K, V>* map, K key){
 
 template<typename V>
 Pair<Size, U64> map_slot_offset(Map<String, V>* map, String key){
-	auto hash   = map_hash_fnv64(raw_data(key), len(key));
+	auto hash   = map_hash_fnv64(key.raw_data(), key.len());
 	Size pos    = Size(hash & (map->capacity - 1));
 	return {pos, hash};
 }
@@ -795,7 +793,7 @@ bool str_starts_with(String s, String prefix);
 
 bool str_ends_with(String s, String suffix);
 
-Size str_find(String s, String substr, Size start = 0);
+Option<Size> str_find(String s, String substr, Size start = 0);
 
 [[nodiscard]]
 String str_clone(String s, Allocator allocator);

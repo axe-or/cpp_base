@@ -66,7 +66,7 @@ Arena arena_from_buffer(Slice<U8> buf){
 }
 
 Arena arena_create_virtual(Size reserve){
-	auto data = page_block_create(reserve);
+	auto data = PageBlock::make(reserve);
 
 	Arena a = {
 		.data = data,
@@ -102,7 +102,7 @@ retry:
 			return NULL; /* Out of memory */
 		}
 		else if(a->type == ArenaType::Virtual){
-			if(page_block_push(&a->data, required) == NULL){
+			if(a->data.push(required) == NULL){
 				return NULL; /* Out of memory */
 			}
 			goto retry;
@@ -127,7 +127,7 @@ retry:
 		if((current - last_allocation_size + new_size) > limit){
 			if(a->type == ArenaType::Virtual){
 				Size to_commit = (current - last_allocation_size + new_size) - limit;
-				if(page_block_push(&a->data, to_commit) != NULL){
+				if(a->data.push(to_commit) != NULL){
 					goto retry;
 				}
 			}
@@ -160,7 +160,7 @@ void arena_free_all(Arena* a){
 void arena_destroy(Arena* a){
 	arena_free_all(a);
 	if(a->type == ArenaType::Virtual){
-		page_block_destroy(&a->data);
+		a->data.destroy();
 	}
 }
 
