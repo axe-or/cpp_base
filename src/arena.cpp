@@ -21,34 +21,34 @@ void* arena_allocator_func(
 		return nullptr;
 
 	case M::Alloc:
-		return arena_alloc(arena, size, align);
+		return arena->alloc(size, align);
 
 	case M::Resize:
-		return arena_resize_in_place(arena, old_ptr, size);
+		return arena->resize_in_place(old_ptr, size);
 
 	case M::Free:
 		return nullptr;
 
 	case M::FreeAll:
-		arena_free_all(arena);
+		arena->free_all();
 		return nullptr;
 
 	case M::Realloc:
-		return arena_realloc(arena, old_ptr, old_size, size, align);
+		return arena->realloc(old_ptr, old_size, size, align);
 	}
 
 	return nullptr;
 }
 
-Allocator arena_allocator(Arena* arena){
+Allocator Arena::as_allocator(){
 	Allocator alloc = {
-		.data = arena,
+		.data = this,
 		.func = arena_allocator_func,
 	};
 	return alloc;
 }
 
-Arena arena_from_buffer(Slice<U8> buf){
+Arena Arena::from_buffer(Slice<U8> buf){
 	PageBlock data = {
 		.reserved = buf.len(),
 		.commited = buf.len(),
@@ -65,7 +65,7 @@ Arena arena_from_buffer(Slice<U8> buf){
 	return a;
 }
 
-Arena arena_create_virtual(Size reserve){
+Arena Arena::make_virtual(Size reserve){
 	auto data = PageBlock::make(reserve);
 
 	Arena a = {
@@ -87,47 +87,47 @@ Uintptr arena_required_mem(Uintptr cur, Size count, Size align){
 	return required;
 }
 
-void* arena_alloc(Arena* a, Size size, Size align){
+void* Arena::alloc(Size size, Size align){
 retry:
-	Uintptr base = (Uintptr)a->data.pointer;
-	Uintptr current = (Uintptr)base + (Uintptr)a->offset;
+	Uintptr base = (Uintptr)data.pointer;
+	Uintptr current = (Uintptr)base + (Uintptr)offset;
 
-	Size available = a->data.commited - (current - base);
+	Size available = data.commited - (current - base);
 	Size required  = arena_required_mem(current, size, align);
 
 	[[unlikely]] if(required > available){
-		Size in_reserve = a->data.reserved - a->data.commited;
+		Size in_reserve = data.reserved - data.commited;
 		Size diff = required - available;
 		if(diff > in_reserve){
 			return NULL; /* Out of memory */
 		}
-		else if(a->type == ArenaType::Virtual){
-			if(a->data.push(required) == NULL){
+		else if(type == ArenaType::Virtual){
+			if(data.push(required) == NULL){
 				return NULL; /* Out of memory */
 			}
 			goto retry;
 		}
 	}
 
-	a->offset += required;
-	void* allocation = (U8*)a->data.pointer + (a->offset - size);
-	a->last_allocation = (Uintptr)allocation;
+	offset += required;
+	void* allocation = (U8*)data.pointer + (offset - size);
+	last_allocation = (Uintptr)allocation;
 	mem_set(allocation, 0, size);
 	return allocation;
 }
 
-void* arena_resize_in_place(Arena* a, void* ptr, Size new_size){
+void* Arena::resize_in_place(void* ptr, Size new_size){
 retry:
-	if((Uintptr)ptr == a->last_allocation){
-		Uintptr base    = Uintptr(a->data.pointer);
-		Uintptr current = base + Uintptr(a->offset);
-		Uintptr limit   = base + Uintptr(a->data.commited);
+	if((Uintptr)ptr == last_allocation){
+		Uintptr base    = Uintptr(data.pointer);
+		Uintptr current = base + Uintptr(offset);
+		Uintptr limit   = base + Uintptr(data.commited);
 
-		Size last_allocation_size = current - a->last_allocation;
+		Size last_allocation_size = current - last_allocation;
 		if((current - last_allocation_size + new_size) > limit){
-			if(a->type == ArenaType::Virtual){
+			if(type == ArenaType::Virtual){
 				Size to_commit = (current - last_allocation_size + new_size) - limit;
-				if(a->data.push(to_commit) != NULL){
+				if(data.push(to_commit) != NULL){
 					goto retry;
 				}
 			}
@@ -135,17 +135,17 @@ retry:
 			return NULL; /* No space left*/
 		}
 
-		a->offset += new_size - last_allocation_size;
+		offset += new_size - last_allocation_size;
 		return ptr;
 	}
 
 	return NULL;
 }
 
-void* arena_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align){
-	void* new_ptr = arena_resize_in_place(a, ptr, new_size);
+void* Arena::realloc(void* ptr, Size old_size, Size new_size, Size align){
+	void* new_ptr = this->resize_in_place(ptr, new_size);
 	if(new_ptr == NULL){
-		new_ptr = arena_alloc(a, new_size, align);
+		new_ptr = this->alloc(new_size, align);
 		if(new_ptr != NULL){
 			mem_copy_no_overlap(new_ptr, ptr, min(old_size, new_size));
 		}
@@ -153,14 +153,14 @@ void* arena_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size alig
 	return new_ptr;
 }
 
-void arena_free_all(Arena* a){
-	a->offset = 0;
+void Arena::free_all(){
+	offset = 0;
 }
 
-void arena_destroy(Arena* a){
-	arena_free_all(a);
-	if(a->type == ArenaType::Virtual){
-		a->data.destroy();
+void Arena::destroy(){
+	this->free_all();
+	if(type == ArenaType::Virtual){
+		data.destroy();
 	}
 }
 

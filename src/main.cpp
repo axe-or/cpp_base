@@ -32,7 +32,8 @@ std::ostream& operator<<(std::ostream& os, Option<T> v){
 }
 
 int main(){
-	auto allocator = heap_allocator();
+	auto arena = Arena::make_virtual(10 * mem_MiB);
+	auto allocator = arena.as_allocator();
 
 	auto arr = DynamicArray<I32*>::make(allocator);
 	defer(arr.destroy());

@@ -519,23 +519,26 @@ struct Arena {
 	Size offset;
 	Uintptr last_allocation;
 	ArenaType type;
+
+	void* alloc(Size nbytes, Size align);
+
+	void* resize_in_place(void* ptr, Size new_size);
+
+	void* realloc(void* ptr, Size old_size, Size new_size, Size align);
+
+	void free_all();
+
+	void destroy();
+
+	Allocator as_allocator();
+
+	static Arena from_buffer(Slice<U8> buf);
+
+	static Arena make_virtual(Size reserve);
 };
 
-void* arena_alloc(Arena* a, Size nbytes, Size align);
 
-void* arena_resize_in_place(Arena* a, void* ptr, Size new_size);
 
-void* arena_realloc(Arena* a, void* ptr, Size old_size, Size new_size, Size align);
-
-void arena_free_all(Arena* a);
-
-Arena arena_from_buffer(Slice<U8> buf);
-
-Arena arena_create_virtual(Size reserve);
-
-void arena_destroy(Arena* a);
-
-Allocator arena_allocator(Arena* a);
 
 //// Dynamic Array ////////////////////////////////////////////////////////////
 template<typename T>
