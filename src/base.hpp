@@ -156,14 +156,14 @@ struct Result {
 
 	Result() : has_value{false} {}
 	Result(Value v) : value{v}, has_value{true} {}
-	Result(Error v) : value{v}, has_value{false} {}
+	Result(Error e) : error{e}, has_value{false} {}
 
 	bool ok(){ return has_value; }
 };
 
 template<typename T>
 struct Slice {
-	T*   _data   = nullptr;
+	T*    _data   = nullptr;
 	isize _length = 0;
 
 	T& operator[](isize idx) noexcept {
@@ -310,7 +310,6 @@ private:
 	byte const * _data = nullptr;
 	isize _length = 0;
 public:
-
 	// Implict conversion, this is one of the very vew places an implicit
 	// conversion is made in the library, mostly to write C-strings more
 	// ergonomically.
@@ -393,6 +392,17 @@ enum class AllocatorMode : u32 {
 	Realloc  = 5, // Re-allocate pointer
 };
 
+enum class MemoryError : u32 {
+	None = 0,
+
+	OutOfMemory,
+	BadSize,
+	BadAlignment,
+	BadFree,
+	ResizeFailed,
+	UnknownMode,
+};
+
 enum class AllocatorCapability : u32 {
 	AllocAny = 1 << 0, // Can alloc any size
 	FreeAny  = 1 << 1, // Can free in any order
@@ -402,7 +412,7 @@ enum class AllocatorCapability : u32 {
 };
 
 // Memory allocator method
-using AllocatorFunc = void* (*) (
+using AllocatorFunc = Result<void*, MemoryError> (*) (
 	void* impl,
 	AllocatorMode op,
 	void* old_ptr,
@@ -417,13 +427,13 @@ struct Allocator {
 	void* data = 0;
 	AllocatorFunc func = 0;
 
-	void* alloc(isize nbytes, isize align);
+	Result<void*, MemoryError> alloc(isize nbytes, isize align);
 
-	void* resize(void* ptr, isize new_size);
+	Result<void*, MemoryError> resize(void* ptr, isize new_size);
 
 	void free(void* ptr, isize old_size, isize align);
 
-	void* realloc(void* ptr, isize old_size, isize new_size, isize align);
+	Result<void*, MemoryError> realloc(void* ptr, isize old_size, isize new_size, isize align);
 
 	void free_all();
 };
@@ -431,13 +441,13 @@ struct Allocator {
 
 template<typename T> [[nodiscard]]
 T* make(Allocator a){
-	T* p = (T*)a.alloc(sizeof(T), alignof(T));
+	T* p = (T*)a.alloc(sizeof(T), alignof(T)).or_else(nullptr);
 	return p;
 }
 
 template<typename T> [[nodiscard]]
 Slice<T> make(Allocator a, isize elems){
-	T* p = (T*)a.alloc(sizeof(T) * elems, alignof(T));
+	T* p = (T*)a.alloc(sizeof(T) * elems, alignof(T)).or_else(nullptr);
 	return Slice<T>(p, p == nullptr ? 0 : elems);
 }
 
@@ -558,14 +568,11 @@ struct DynamicArray {
 	bool append(T elem){
 		[[unlikely]] if(_length >= _capacity){
 			isize new_cap = mem_align_forward_size(_length * 2, 16);
-			auto new_data = (T*)_allocator.realloc(
-					_data,
-					_capacity * sizeof(T),
-					new_cap, alignof(T));
-			if(new_data == nullptr){
+			auto new_data = _allocator.realloc(_data, _capacity * sizeof(T), new_cap, alignof(T));
+			if(!new_data.ok()){
 				return false;
 			}
-			_data = new_data;
+			_data = (T*)new_data.value;
 		}
 		_data[_length] = elem;
 		_length += 1;
@@ -617,12 +624,18 @@ struct DynamicArray {
 		_length -= 1;
 	}
 
-	static DynamicArray<T> make(Allocator alloc, isize initial_cap = 16){
+	static Result<DynamicArray<T>, MemoryError> make(Allocator alloc, isize initial_cap = 16){
 		DynamicArray<T> arr;
 		arr._capacity = initial_cap;
 		arr._length = 0;
 		arr._allocator = alloc;
-		arr._data = (T*)alloc.alloc(initial_cap * sizeof(T), alignof(T));
+
+		auto buffer = alloc.alloc(initial_cap * sizeof(T), alignof(T));
+		if(!buffer.ok()){
+			return buffer.error;
+		}
+		arr._data = (T*)buffer.value;
+
 		return arr;
 	}
 
@@ -651,106 +664,106 @@ u64 map_hash_fnv64(byte const * data, isize nbytes){
 	return hash | u64(hash == 0);
 }
 
-template<typename K, typename V>
-struct MapSlot {
-	K key;
-	V value;
-	u64 hash;
-	MapSlot* next;
-};
-
-template<typename K, typename V>
-struct Map {
-	MapSlot<K, V>* base_slots;
-	isize capacity;
-	Allocator allocator;
-};
-
-template<typename K, typename V>
-Map<K, V> map_create(Allocator allocator, isize capacity){
-	ensure((capacity & (capacity - 1)) == 0, "Capacity must be a power of 2");
-	Map<K, V> m;
-	auto base_slots = allocator.alloc(capacity * sizeof(MapSlot<K, V>), alignof(MapSlot<K, V>));
-	if(!base_slots){ return m; }
-
-	m.base_slots = static_cast<MapSlot<K, V>*>(base_slots);
-	m.capacity = capacity;
-	m.allocator = allocator;
-
-	return m;
-}
-
-template<typename K, typename V>
-void destroy(Map<K, V>* map){
-	constexpr isize slot_size = sizeof(MapSlot<K, V>);
-	constexpr isize slot_align = alignof(MapSlot<K, V>);
-	for(isize i = 0; i < map->capacity; i++){
-		MapSlot<K, V>* next = nullptr;
-		for(MapSlot<K, V>* slot = map->base_slots[i].next; slot != nullptr; slot = next){
-			next = slot->next;
-			map->allocator.free((byte*)slot, slot_size, slot_align);
-		}
-	}
-
-	mem_free(map->allocator, (byte*)map->base_slots, slot_size * map->capacity, slot_align);
-}
-
-template<typename K, typename V>
-Pair<isize, u64> map_slot_offset(Map<K, V>* map, K key){
-	auto data   = (byte const*)&key;
-	auto hash   = map_hash_fnv64(data, sizeof(key));
-	isize pos    = isize(hash & (map->capacity - 1));
-	return {pos, hash};
-}
-
-template<typename V>
-Pair<isize, u64> map_slot_offset(Map<String, V>* map, String key){
-	auto hash   = map_hash_fnv64(key.raw_data(), key.len());
-	isize pos    = isize(hash & (map->capacity - 1));
-	return {pos, hash};
-}
-
-template<typename K, typename V, typename PK = K>
-Pair<V, bool> map_get(Map<K, V>* map, PK key){
-	auto map_key = K(key);
-	auto [pos, hash] = map_slot_offset(map, map_key);
-
-	for(auto slot = &map->base_slots[pos]; slot != nullptr; slot = slot->next){
-		bool hit = (slot->hash == hash) && (slot->key == map_key);
-		if(hit){
-			return {slot->value, true};
-		}
-	}
-	return {V{}, false};
-}
-
-template<typename K, typename V, typename PK = K, typename PV = V>
-bool map_set(Map<K, V>* map, PK map_key, PV map_val){
-	auto key = static_cast<K>(map_key);
-	auto val = static_cast<V>(map_val);
-
-	auto [pos, hash] = map_slot_offset(map, key);
-
-	if(map->base_slots[pos].hash == 0){
-		map->base_slots[pos].key   = key;
-		map->base_slots[pos].value = val;
-		map->base_slots[pos].hash  = hash;
-	}
-	else {
-		MapSlot<K, V>* new_slot = make<MapSlot<K, V>>(map->allocator);
-		if(new_slot == nullptr){
-			return false;
-		}
-
-		*new_slot = map->base_slots[pos];
-
-		map->base_slots[pos].key   = key;
-		map->base_slots[pos].value = val;
-		map->base_slots[pos].hash  = hash;
-		map->base_slots[pos].next  = new_slot;
-	}
-	return true;
-}
+// template<typename K, typename V>
+// struct MapSlot {
+// 	K key;
+// 	V value;
+// 	u64 hash;
+// 	MapSlot* next;
+// };
+//
+// template<typename K, typename V>
+// struct Map {
+// 	MapSlot<K, V>* base_slots;
+// 	isize capacity;
+// 	Allocator allocator;
+// };
+//
+// template<typename K, typename V>
+// Map<K, V> map_create(Allocator allocator, isize capacity){
+// 	ensure((capacity & (capacity - 1)) == 0, "Capacity must be a power of 2");
+// 	Map<K, V> m;
+// 	auto base_slots = allocator.alloc(capacity * sizeof(MapSlot<K, V>), alignof(MapSlot<K, V>));
+// 	if(!base_slots){ return m; }
+//
+// 	m.base_slots = static_cast<MapSlot<K, V>*>(base_slots);
+// 	m.capacity = capacity;
+// 	m.allocator = allocator;
+//
+// 	return m;
+// }
+//
+// template<typename K, typename V>
+// void destroy(Map<K, V>* map){
+// 	constexpr isize slot_size = sizeof(MapSlot<K, V>);
+// 	constexpr isize slot_align = alignof(MapSlot<K, V>);
+// 	for(isize i = 0; i < map->capacity; i++){
+// 		MapSlot<K, V>* next = nullptr;
+// 		for(MapSlot<K, V>* slot = map->base_slots[i].next; slot != nullptr; slot = next){
+// 			next = slot->next;
+// 			map->allocator.free((byte*)slot, slot_size, slot_align);
+// 		}
+// 	}
+//
+// 	mem_free(map->allocator, (byte*)map->base_slots, slot_size * map->capacity, slot_align);
+// }
+//
+// template<typename K, typename V>
+// Pair<isize, u64> map_slot_offset(Map<K, V>* map, K key){
+// 	auto data   = (byte const*)&key;
+// 	auto hash   = map_hash_fnv64(data, sizeof(key));
+// 	isize pos    = isize(hash & (map->capacity - 1));
+// 	return {pos, hash};
+// }
+//
+// template<typename V>
+// Pair<isize, u64> map_slot_offset(Map<String, V>* map, String key){
+// 	auto hash   = map_hash_fnv64(key.raw_data(), key.len());
+// 	isize pos    = isize(hash & (map->capacity - 1));
+// 	return {pos, hash};
+// }
+//
+// template<typename K, typename V, typename PK = K>
+// Pair<V, bool> map_get(Map<K, V>* map, PK key){
+// 	auto map_key = K(key);
+// 	auto [pos, hash] = map_slot_offset(map, map_key);
+//
+// 	for(auto slot = &map->base_slots[pos]; slot != nullptr; slot = slot->next){
+// 		bool hit = (slot->hash == hash) && (slot->key == map_key);
+// 		if(hit){
+// 			return {slot->value, true};
+// 		}
+// 	}
+// 	return {V{}, false};
+// }
+//
+// template<typename K, typename V, typename PK = K, typename PV = V>
+// bool map_set(Map<K, V>* map, PK map_key, PV map_val){
+// 	auto key = static_cast<K>(map_key);
+// 	auto val = static_cast<V>(map_val);
+//
+// 	auto [pos, hash] = map_slot_offset(map, key);
+//
+// 	if(map->base_slots[pos].hash == 0){
+// 		map->base_slots[pos].key   = key;
+// 		map->base_slots[pos].value = val;
+// 		map->base_slots[pos].hash  = hash;
+// 	}
+// 	else {
+// 		MapSlot<K, V>* new_slot = make<MapSlot<K, V>>(map->allocator);
+// 		if(new_slot == nullptr){
+// 			return false;
+// 		}
+//
+// 		*new_slot = map->base_slots[pos];
+//
+// 		map->base_slots[pos].key   = key;
+// 		map->base_slots[pos].value = val;
+// 		map->base_slots[pos].hash  = hash;
+// 		map->base_slots[pos].next  = new_slot;
+// 	}
+// 	return true;
+// }
 
 //// Heap Allocator (LibC) ////////////////////////////////////////////////////
 Allocator heap_allocator();

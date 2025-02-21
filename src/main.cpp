@@ -1,24 +1,24 @@
 #include "base.hpp"
 // #include "debug_print.cpp"
 
-template<typename K, typename V>
-std::ostream& operator<<(std::ostream& os, Map<K, V> map){
-	for(isize i = 0; i < map.capacity; i ++){
-		auto head = &map.base_slots[i];
-
-		os << "[" << i << "]\t";
-		if(head->hash == 0){
-			os << "_\n";
-		}
-		else {
-			for(MapSlot<K, V>* slot = head; slot != nullptr; slot = slot->next){
-				os << slot->key << " = " << slot->value << "(" << std::hex << slot->hash << ")   ";
-			}
-			os << "\n";
-		}
-	}
-	return os;
-}
+// template<typename K, typename V>
+// std::ostream& operator<<(std::ostream& os, Map<K, V> map){
+// 	for(isize i = 0; i < map.capacity; i ++){
+// 		auto head = &map.base_slots[i];
+//
+// 		os << "[" << i << "]\t";
+// 		if(head->hash == 0){
+// 			os << "_\n";
+// 		}
+// 		else {
+// 			for(MapSlot<K, V>* slot = head; slot != nullptr; slot = slot->next){
+// 				os << slot->key << " = " << slot->value << "(" << std::hex << slot->hash << ")   ";
+// 			}
+// 			os << "\n";
+// 		}
+// 	}
+// 	return os;
+// }
 
 template<typename T, typename E>
 std::ostream& operator<<(std::ostream& os, Result<T, E> v){
@@ -35,7 +35,7 @@ int main(){
 	auto arena = Arena::make_virtual(10 * mem_MiB);
 	auto allocator = arena.as_allocator();
 
-	auto arr = DynamicArray<i32*>::make(allocator);
+	auto arr = DynamicArray<i32*>::make(allocator).unwrap();
 	defer(arr.destroy());
 	i32 n = 0;
 	print(sizeof(Result<u32, String>));

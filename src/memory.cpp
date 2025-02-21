@@ -13,15 +13,15 @@
 #define mem_compare_impl         __builtin_memcmp
 #endif
 
-void* Allocator::alloc(isize nbytes, isize align){
+Result<void*, MemoryError> Allocator::alloc(isize nbytes, isize align){
 	return this->func(this->data, AllocatorMode::Alloc, nullptr, 0, nbytes, align, nullptr);
 }
 
-void* Allocator::resize(void* ptr, isize new_size){
+Result<void*, MemoryError> Allocator::resize(void* ptr, isize new_size){
 	return this->func(this->data, AllocatorMode::Resize, ptr, 0, new_size, 0, nullptr);
 }
 
-void* Allocator::realloc(void* ptr, isize old_size, isize new_size, isize align){
+Result<void*, MemoryError> Allocator::realloc(void* ptr, isize old_size, isize new_size, isize align){
 	return this->func(this->data, AllocatorMode::Realloc, ptr, old_size, new_size, align, nullptr);
 }
 

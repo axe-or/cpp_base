@@ -1,7 +1,7 @@
 #include "base.hpp"
 
 static
-void* arena_allocator_func(
+Result<void*, MemoryError> arena_allocator_func(
 	void* impl,
 	AllocatorMode op,
 	void* old_ptr,
@@ -16,15 +16,21 @@ void* arena_allocator_func(
 	using C = AllocatorCapability;
 
 	switch (op) {
-	case M::Query:
+	case M::Query: {
 		*capabilities = u32(C::AlignAny) | u32(C::AllocAny) | u32(C::FreeAll);
 		return nullptr;
+	}
 
-	case M::Alloc:
-		return arena->alloc(size, align);
+	case M::Alloc:{
+		void* p = arena->alloc(size, align);
+		[[unlikely]] if(!p){ return MemoryError::OutOfMemory; }
+		return p;
+	} break;
 
-	case M::Resize:
-		return arena->resize_in_place(old_ptr, size);
+	case M::Resize: {
+		void* p = arena->resize_in_place(old_ptr, size);
+		[[unlikely]] if(!p){ return MemoryError::ResizeFailed; }
+	};
 
 	case M::Free:
 		return nullptr;
@@ -34,10 +40,12 @@ void* arena_allocator_func(
 		return nullptr;
 
 	case M::Realloc:
-		return arena->realloc(old_ptr, old_size, size, align);
+		void* p = arena->realloc(old_ptr, old_size, size, align);
+		[[unlikely]] if(!p){ return MemoryError::OutOfMemory; }
+		return p;
 	}
 
-	return nullptr;
+	return MemoryError::UnknownMode;
 }
 
 Allocator Arena::as_allocator(){
@@ -99,11 +107,11 @@ retry:
 		isize in_reserve = data.reserved - data.commited;
 		isize diff = required - available;
 		if(diff > in_reserve){
-			return NULL; /* Out of memory */
+			return nullptr; /* Out of memory */
 		}
 		else if(type == ArenaType::Virtual){
-			if(data.push(required) == NULL){
-				return NULL; /* Out of memory */
+			if(data.push(required) == nullptr){
+				return nullptr; /* Out of memory */
 			}
 			goto retry;
 		}
@@ -127,26 +135,26 @@ retry:
 		if((current - last_allocation_size + new_size) > limit){
 			if(type == ArenaType::Virtual){
 				isize to_commit = (current - last_allocation_size + new_size) - limit;
-				if(data.push(to_commit) != NULL){
+				if(data.push(to_commit) != nullptr){
 					goto retry;
 				}
 			}
 
-			return NULL; /* No space left*/
+			return nullptr; /* No space left*/
 		}
 
 		offset += new_size - last_allocation_size;
 		return ptr;
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 void* Arena::realloc(void* ptr, isize old_size, isize new_size, isize align){
 	void* new_ptr = this->resize_in_place(ptr, new_size);
-	if(new_ptr == NULL){
+	if(new_ptr == nullptr){
 		new_ptr = this->alloc(new_size, align);
-		if(new_ptr != NULL){
+		if(new_ptr != nullptr){
 			mem_copy_no_overlap(new_ptr, ptr, min(old_size, new_size));
 		}
 	}
