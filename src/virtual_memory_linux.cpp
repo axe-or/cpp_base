@@ -7,13 +7,13 @@
 #include <unistd.h>
 
 static inline
-bool valid_ptr_and_size(void* ptr, Size size){
-	return ((Uintptr(ptr) & (mem_page_size - 1)) == 0) && ((size & (mem_page_size - 1)) == 0);
+bool valid_ptr_and_size(void* ptr, isize size){
+	return ((uintptr(ptr) & (mem_page_size - 1)) == 0) && ((size & (mem_page_size - 1)) == 0);
 }
 
 static inline
-U32 protect_flags(U8 prot){
-	U32 flag = 0;
+u32 protect_flags(u8 prot){
+	u32 flag = 0;
 	if(prot & mem_protection_execute)
 		flag |= PROT_EXEC;
 	if(prot & mem_protection_read)
@@ -23,18 +23,18 @@ U32 protect_flags(U8 prot){
 	return flag;
 }
 
-void* virtual_reserve(Size nbytes){
+void* virtual_reserve(isize nbytes){
 	nbytes = mem_align_forward_size(nbytes, mem_page_size);
 	void* ptr = mmap(NULL, nbytes, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	return ptr;
 }
 
-void virtual_release(void* pointer, Size nbytes){
+void virtual_release(void* pointer, isize nbytes){
 	debug_assert(valid_ptr_and_size(pointer, nbytes), "Pointer and allocation size must be page aligned");
 	munmap(pointer, nbytes);
 }
 
-void* virtual_commit(void* pointer, Size nbytes){
+void* virtual_commit(void* pointer, isize nbytes){
 	debug_assert(valid_ptr_and_size(pointer, nbytes), "Pointer and allocation size must be page aligned");
 	if(mprotect(pointer, nbytes, PROT_READ | PROT_WRITE) < 0){
 		return NULL;
@@ -42,15 +42,15 @@ void* virtual_commit(void* pointer, Size nbytes){
 	return pointer;	
 }
 
-void virtual_decommit(void* pointer, Size nbytes){
+void virtual_decommit(void* pointer, isize nbytes){
 	debug_assert(valid_ptr_and_size(pointer, nbytes), "Pointer and allocation size must be page aligned");
 	mprotect(pointer, nbytes, PROT_NONE);
 	madvise(pointer, nbytes, MADV_FREE);
 }
 
-bool virtual_protect(void* pointer, Size nbytes, U8 prot){
+bool virtual_protect(void* pointer, isize nbytes, u8 prot){
 	debug_assert(valid_ptr_and_size(pointer, nbytes), "Pointer and allocation size must be page aligned");
-	U32 flags = protect_flags(prot);
+	u32 flags = protect_flags(prot);
 	return mprotect(pointer, nbytes, flags) >= 0;
 }
 

@@ -13,39 +13,39 @@
 #define mem_compare_impl         __builtin_memcmp
 #endif
 
-void* mem_alloc(Allocator a, Size nbytes, Size align){
-	return a.func(a.data, AllocatorMode::Alloc, nullptr, 0, nbytes, align, nullptr);
+void* Allocator::alloc(isize nbytes, isize align){
+	return this->func(this->data, AllocatorMode::Alloc, nullptr, 0, nbytes, align, nullptr);
 }
 
-void* mem_resize(Allocator a, void* ptr, Size new_size){
-	return a.func(a.data, AllocatorMode::Resize, ptr, 0, new_size, 0, nullptr);
+void* Allocator::resize(void* ptr, isize new_size){
+	return this->func(this->data, AllocatorMode::Resize, ptr, 0, new_size, 0, nullptr);
 }
 
-void* mem_realloc(Allocator a, void* ptr, Size old_size, Size new_size, Size align){
-	return a.func(a.data, AllocatorMode::Realloc, ptr, old_size, new_size, align, nullptr);
+void* Allocator::realloc(void* ptr, isize old_size, isize new_size, isize align){
+	return this->func(this->data, AllocatorMode::Realloc, ptr, old_size, new_size, align, nullptr);
 }
 
-void mem_free(Allocator a, void* ptr, Size old_size, Size align){
-	a.func(a.data, AllocatorMode::Free, ptr, old_size, 0, align, nullptr);
+void Allocator::free(void* ptr, isize old_size, isize align){
+	this->func(this->data, AllocatorMode::Free, ptr, old_size, 0, align, nullptr);
 }
 
-void mem_free_all(Allocator a){
-	a.func(a.data, AllocatorMode::FreeAll, 0, 0, 0, 0, nullptr);
+void Allocator::free_all(){
+	this->func(this->data, AllocatorMode::FreeAll, 0, 0, 0, 0, nullptr);
 }
 
-void mem_set(void* p, Byte val, Size count){
+void mem_set(void* p, byte val, isize count){
 	mem_set_impl(p, val, count);
 }
 
-void mem_copy(void* dest, void const * src, Size count){
+void mem_copy(void* dest, void const * src, isize count){
 	mem_copy_impl(dest, src, count);
 }
 
-void mem_copy_no_overlap(void* dest, void const * src, Size count){
+void mem_copy_no_overlap(void* dest, void const * src, isize count){
 	mem_copy_no_overlap_impl(dest, src, count);
 }
 
-I32 mem_compare(void const * a, void const * b, Size count){
+i32 mem_compare(void const * a, void const * b, isize count){
 	return mem_compare_impl(a, b, count);
 }
 

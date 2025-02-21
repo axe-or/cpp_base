@@ -7,28 +7,28 @@
 #include <stdalign.h>
 #include <atomic>
 
-using I8  = int8_t;
-using I16 = int16_t;
-using I32 = int32_t;
-using I64 = int64_t;
+using i8  = int8_t;
+using i16 = int16_t;
+using i32 = int32_t;
+using i64 = int64_t;
 
-using U8  = uint8_t;
-using U16 = uint16_t;
-using U32 = uint32_t;
-using U64 = uint64_t;
+using u8  = uint8_t;
+using u16 = uint16_t;
+using u32 = uint32_t;
+using u64 = uint64_t;
 
 using uint = unsigned int;
-using Byte = uint8_t;
-using Rune = I32;
+using byte = uint8_t;
+using rune = i32;
 
-using Size = ptrdiff_t;
+using isize = ptrdiff_t;
 
-using Uintptr = uintptr_t;
+using uintptr = uintptr_t;
 
-using F32 = float;
-using F64 = double;
+using f32 = float;
+using f64 = double;
 
-constexpr Size cache_line_size = 64;
+constexpr isize cache_line_size = 64;
 
 template<typename T>
 using Atomic = std::atomic<T>;
@@ -42,9 +42,9 @@ struct Pair {
 // Swap bytes around, useful for when dealing with endianess
 template<typename T>
 void swap_bytes(T* data){
-	Size len = sizeof(T);
-	for(Size i = 0; i < (len / 2); i += 1){
-		Byte temp = data[i];
+	isize len = sizeof(T);
+	for(isize i = 0; i < (len / 2); i += 1){
+		byte temp = data[i];
 		data[i] = data[len - (i + 1)];
 		data[len - (i + 1)] = temp;
 	}
@@ -84,10 +84,21 @@ T clamp(T lo, T x, T hi){
 	return min(max(lo, x), hi);
 }
 
-static_assert(sizeof(F32) == 4 && sizeof(F64) == 8, "Bad float size");
-static_assert(sizeof(Size) == sizeof(Size), "Mismatched (i/u)size");
+static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Bad float size");
+static_assert(sizeof(isize) == sizeof(isize), "Mismatched (i/u)size");
 static_assert(sizeof(void(*)(void)) == sizeof(void*), "Function pointers and data pointers must be of the same width");
-static_assert(sizeof(void(*)(void)) == sizeof(Uintptr), "Mismatched pointer types");
+static_assert(sizeof(void(*)(void)) == sizeof(uintptr), "Mismatched pointer types");
+
+namespace meta {
+template<typename A, typename B>
+struct SameType { static constexpr bool value = false; };
+
+template<typename A>
+struct SameType<A, A> { static constexpr bool value = true; };
+
+template<typename A, typename B>
+constexpr bool same_type = SameType<A, B>::value;
+}
 
 namespace impl_defer {
 	template<typename F>
@@ -116,94 +127,58 @@ void ensure(bool pred, char const * msg);
 
 void bounds_check_assert(bool pred, char const * msg);
 
-template<typename T>
-struct Option {
-	T _value;
-	bool _has_value = false;
+template<typename Value, typename Error>
+struct Result {
+	static_assert(!meta::same_type<Value, Error>, "Value and Error must not be the same types");
+	union {
+		Value value;
+		Error error{};
+	};
+	u8 has_value;
 
-	T unwrap(){
-		if(_has_value){
-			return _value;
+	Value unwrap(){
+		ensure(has_value, "Cannot unwrap error result");
+		return value;
+	}
+
+	Error unwrap_error(){
+		ensure(has_value, "Cannot unwrap_error value result");
+		return error;
+	}
+
+	Value or_else(Value alt){
+		if(has_value){
+			return value;
+		} else {
+			return alt;
 		}
-		panic("Attempt to unwrap a null option");
 	}
 
-	T unwrap_unchecked(){
-		return _value;
-	}
+	Result() : has_value{false} {}
+	Result(Value v) : value{v}, has_value{true} {}
+	Result(Error v) : value{v}, has_value{false} {}
 
-	bool ok() const { return _has_value; }
-
-	template<typename U>
-	T or_else(U alt){
-		if(_has_value){
-			return _value;
-		}
-		return static_cast<T>(alt);
-	}
-
-	void clear(){
-		_has_value = false;
-	}
-
-	Option() : _has_value{false}{}
-
-	// Implicit conversion
-	Option(T val) : _value{val}, _has_value{true} {}
-};
-
-// Zero value optimization for pointers
-template<typename T>
-struct Option<T*> {
-	T* _value;
-
-	T* unwrap(){
-		if(_value != nullptr){
-			return _value;
-		}
-		panic("Attempt to unwrap a null option");
-	}
-
-	T* unwrap_unchecked(){
-		return _value;
-	}
-
-	bool ok() const { return _value != nullptr; }
-
-	T* or_else(T* alt){
-		if(_value != nullptr){
-			return _value;
-		}
-		return alt;
-	}
-
-	void clear(){
-		_value = nullptr;
-	}
-
-	Option() : _value{nullptr} {}
-
-	Option(T* p) : _value{p} {}
+	bool ok(){ return has_value; }
 };
 
 template<typename T>
 struct Slice {
 	T*   _data   = nullptr;
-	Size _length = 0;
+	isize _length = 0;
 
-	T& operator[](Size idx) noexcept {
+	T& operator[](isize idx) noexcept {
 		bounds_check_assert(idx >= 0 && idx < _length, "Index to slice is out of bounds");
 		return _data[idx];
 	}
 
-	T const& operator[](Size idx) const noexcept {
+	T const& operator[](isize idx) const noexcept {
 		bounds_check_assert(idx >= 0 && idx < _length, "Index to slice is out of bounds");
 		return _data[idx];
 	}
 
-	Slice<T> operator[](Pair<Size> range){
-		Size from = range.a;
-		Size to = range.b;
+	Slice<T> operator[](Pair<isize> range){
+		isize from = range.a;
+		isize to = range.b;
 
 		bounds_check_assert(from >= 0 && from < _length && to >= 0 && to <= _length && from <= to, "Index to sub-slice is out of bounds");
 
@@ -214,7 +189,7 @@ struct Slice {
 	}
 
 	// Get the sub-slice of interval a..b (end exclusive)
-	Slice<T> slice(Size from, Size to){
+	Slice<T> slice(isize from, isize to){
 		bounds_check_assert(
 				from >= 0 && from < _length &&
 				to >= 0 && to <= _length &&
@@ -227,48 +202,48 @@ struct Slice {
 	}
 
 	// Get the sub-slice of elements after index (inclusive)
-	Slice<T> slice_right(Size idx){
+	Slice<T> slice_right(isize idx){
 		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
 		auto res = Slice<T>(&_data[idx], _length - idx);
 		return res;
 	}
 
 	// Get the sub-slice of elements before index (exclusive)
-	Slice<T> slice_left(Size idx){
+	Slice<T> slice_left(isize idx){
 		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
 		auto res = Slice(_data, idx);
 		return res;
 	}
 
 	Slice(){}
-	explicit Slice(T* data, Size len) : _data{data}, _length{len} {}
+	explicit Slice(T* data, isize len) : _data{data}, _length{len} {}
 
 	// Accessors
-	Size len() const { return _length; }
+	isize len() const { return _length; }
 	T* raw_data() const { return _data; }
 };
 
-constexpr Size mem_KiB = 1024ll;
-constexpr Size mem_MiB = 1024ll * 1024ll;
-constexpr Size mem_GiB = 1024ll * 1024ll * 1024ll;
+constexpr isize mem_KiB = 1024ll;
+constexpr isize mem_MiB = 1024ll * 1024ll;
+constexpr isize mem_GiB = 1024ll * 1024ll * 1024ll;
 
-void mem_set(void* p, Byte val, Size nbytes);
+void mem_set(void* p, byte val, isize nbytes);
 
-void mem_copy(void* dest, void const * src, Size nbytes);
+void mem_copy(void* dest, void const * src, isize nbytes);
 
-void mem_copy_no_overlap(void* dest, void const * src, Size nbytes);
+void mem_copy_no_overlap(void* dest, void const * src, isize nbytes);
 
-I32 mem_compare(void const * a, void const * b, Size nbytes);
+i32 mem_compare(void const * a, void const * b, isize nbytes);
 
 static inline
-bool mem_valid_alignment(Size a){
+bool mem_valid_alignment(isize a){
 	return ((a & (a - 1)) == 0) && (a > 0);
 }
 
 static inline
-Uintptr mem_align_forward_ptr(Uintptr p, Uintptr a){
+uintptr mem_align_forward_ptr(uintptr p, uintptr a){
 	debug_assert(mem_valid_alignment(a), "Invalid memory alignment");
-	Uintptr mod = p & (a - 1); // Fast modulo for powers of 2
+	uintptr mod = p & (a - 1); // Fast modulo for powers of 2
 	if(mod > 0){
 		p += (a - mod);
 	}
@@ -276,9 +251,9 @@ Uintptr mem_align_forward_ptr(Uintptr p, Uintptr a){
 }
 
 static inline
-Size mem_align_forward_size(Size p, Size a){
+isize mem_align_forward_size(isize p, isize a){
 	debug_assert(mem_valid_alignment(a), "Invalid size alignment");
-	Size mod = p & (a - 1); // Fast modulo for powers of 2
+	isize mod = p & (a - 1); // Fast modulo for powers of 2
 	if(mod > 0){
 		p += (a - mod);
 	}
@@ -287,44 +262,44 @@ Size mem_align_forward_size(Size p, Size a){
 
 //// UTF-8 ////////////////////////////////////////////////////////////////////
 struct Utf8EncodeResult {
-	Byte bytes[4];
-	I32 len;
+	byte bytes[4];
+	i32 len;
 };
 
 struct Utf8DecodeResult {
-	Rune codepoint;
-	I32 len;
+	rune codepoint;
+	i32 len;
 };
 
-constexpr Rune ERROR = 0xfffd;
+constexpr rune ERROR = 0xfffd;
 
 constexpr Utf8EncodeResult ERROR_ENCODED = {
 	.bytes = {0xef, 0xbf, 0xbd},
 	.len = 0,
 };
 
-Utf8EncodeResult utf8_encode(Rune c);
+Utf8EncodeResult utf8_encode(rune c);
 
-Utf8DecodeResult utf8_decode(Slice<Byte> buf);
+Utf8DecodeResult utf8_decode(Slice<byte> buf);
 
 struct Utf8Iterator {
-	Slice<Byte> data;
-	Size current;
+	Slice<byte> data;
+	isize current;
 };
 
-bool iter_next(Utf8Iterator* it, Rune* r, I32* len);
+bool iter_next(Utf8Iterator* it, rune* r, i32* len);
 
-bool iter_prev(Utf8Iterator* it, Rune* r, I32* len);
+bool iter_prev(Utf8Iterator* it, rune* r, i32* len);
 
-Rune iter_next(Utf8Iterator* it);
+rune iter_next(Utf8Iterator* it);
 
-Rune iter_prev(Utf8Iterator* it);
+rune iter_prev(Utf8Iterator* it);
 
 //// String ///////////////////////////////////////////////////////////////////
 static inline
-Size cstring_len(char const* cstr){
-	Size size = 0;
-	for(Size i = 0; cstr[i] != 0; i += 1){
+isize cstring_len(char const* cstr){
+	isize size = 0;
+	for(isize i = 0; cstr[i] != 0; i += 1){
 		size += 1;
 	}
 	return size;
@@ -332,37 +307,37 @@ Size cstring_len(char const* cstr){
 
 struct String {
 private:
-	Byte const * _data = nullptr;
-	Size _length = 0;
+	byte const * _data = nullptr;
+	isize _length = 0;
 public:
 
 	// Implict conversion, this is one of the very vew places an implicit
 	// conversion is made in the library, mostly to write C-strings more
 	// ergonomically.
 	String(){}
-	String(const char* cs) : _data{(Byte const*)cs}, _length{cstring_len(cs)}{}
-	explicit String(Byte const* p, Size n) : _data{p}, _length{n}{}
+	String(const char* cs) : _data{(byte const*)cs}, _length{cstring_len(cs)}{}
+	explicit String(byte const* p, isize n) : _data{p}, _length{n}{}
 
-	Byte operator[](Size idx) const noexcept {
+	byte operator[](isize idx) const noexcept {
 		bounds_check_assert(idx >= 0 && idx <_length, "Out of bounds index on string");
 		return _data[idx];
 	}
 
-	String operator[](Pair<Size> range) const noexcept {
-		Size from = range.a;
-		Size to = range.b;
+	String operator[](Pair<isize> range) const noexcept {
+		isize from = range.a;
+		isize to = range.b;
 		bounds_check_assert(from >= 0 && from < _length && to >= 0 && to <= _length && from <= to, "Index to sub-string is out of bounds");
 
 		return String(&_data[from], to - from);
 	}
 
-	String slice_right(Size idx){
+	String slice_right(isize idx){
 		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
 		auto res = String(&_data[idx], _length - idx);
 		return res;
 	}
 
-	String slice_left(Size idx){
+	String slice_left(isize idx){
 		bounds_check_assert(idx >= 0 && idx < _length, "Index to sub-slice is out of bounds");
 		auto res = String(_data, idx);
 		return res;
@@ -380,22 +355,22 @@ public:
 	}
 
 	// Accessors
-	Size len() const { return _length; }
-	Byte* raw_data() const { return (Byte*)_data; }
+	isize len() const { return _length; }
+	byte* raw_data() const { return (byte*)_data; }
 };
 
 static inline
 String string_from_cstring(char const* data){
-	return String((Byte const*)data, cstring_len(data));
+	return String((byte const*)data, cstring_len(data));
 }
 
 static inline
-String string_from_cstring(char const* data, Size start, Size length){
-	return String((Byte const*) &data[start], length);
+String string_from_cstring(char const* data, isize start, isize length){
+	return String((byte const*) &data[start], length);
 }
 
 static inline
-String string_from_bytes(Slice<Byte> buf){
+String string_from_bytes(Slice<byte> buf){
 	return String(buf.raw_data(), buf.len());
 }
 
@@ -404,12 +379,12 @@ Utf8Iterator str_iterator(String s);
 Utf8Iterator str_iterator_reversed(String s);
 
 //// Memory ///////////////////////////////////////////////////////////////////
-constexpr U32 mem_protection_none    = 0;
-constexpr U32 mem_protection_read    = (1 << 0);
-constexpr U32 mem_protection_write   = (1 << 1);
-constexpr U32 mem_protection_execute = (1 << 2);
+constexpr u32 mem_protection_none    = 0;
+constexpr u32 mem_protection_read    = (1 << 0);
+constexpr u32 mem_protection_write   = (1 << 1);
+constexpr u32 mem_protection_execute = (1 << 2);
 
-enum class AllocatorMode : U32 {
+enum class AllocatorMode : u32 {
 	Query    = 0, // Query allocator's capabilities
 	Alloc    = 1, // Allocate a chunk of memory
 	Resize   = 2, // Resize an allocation in-place
@@ -418,7 +393,7 @@ enum class AllocatorMode : U32 {
 	Realloc  = 5, // Re-allocate pointer
 };
 
-enum class AllocatorCapability : U32 {
+enum class AllocatorCapability : u32 {
 	AllocAny = 1 << 0, // Can alloc any size
 	FreeAny  = 1 << 1, // Can free in any order
 	FreeAll  = 1 << 2, // Can free all allocations
@@ -431,100 +406,101 @@ using AllocatorFunc = void* (*) (
 	void* impl,
 	AllocatorMode op,
 	void* old_ptr,
-	Size old_size,
-	Size size,
-	Size align,
-	U32* capabilities
+	isize old_size,
+	isize size,
+	isize align,
+	u32* capabilities
 );
 
 // Memory allocator interface
 struct Allocator {
 	void* data = 0;
 	AllocatorFunc func = 0;
+
+	void* alloc(isize nbytes, isize align);
+
+	void* resize(void* ptr, isize new_size);
+
+	void free(void* ptr, isize old_size, isize align);
+
+	void* realloc(void* ptr, isize old_size, isize new_size, isize align);
+
+	void free_all();
 };
 
-void* mem_alloc(Allocator a, Size nbytes, Size align);
-
-void* mem_resize(Allocator a, void* ptr, Size new_size);
-
-void mem_free(Allocator a, void* ptr, Size old_size, Size align);
-
-void* mem_realloc(Allocator a, void* ptr, Size old_size, Size new_size, Size align);
-
-void mem_free_all(Allocator a);
 
 template<typename T> [[nodiscard]]
 T* make(Allocator a){
-	T* p = (T*)mem_alloc(a, sizeof(T), alignof(T));
+	T* p = (T*)a.alloc(sizeof(T), alignof(T));
 	return p;
 }
 
 template<typename T> [[nodiscard]]
-Slice<T> make(Allocator a, Size elems){
-	T* p = (T*)mem_alloc(a, sizeof(T) * elems, alignof(T));
+Slice<T> make(Allocator a, isize elems){
+	T* p = (T*)a.alloc(sizeof(T) * elems, alignof(T));
 	return Slice<T>(p, p == nullptr ? 0 : elems);
 }
 
 template<typename T>
 void destroy(Allocator a, T* obj){
-	mem_free(a, obj, sizeof(T));
+	a.free(obj, sizeof(T));
 }
 
 template<typename T>
 void destroy(Allocator a, Slice<T> s){
-	mem_free(a, s.raw_data(), sizeof(T) * s.len());
+	a.free(s.raw_data(), sizeof(T) * s.len());
 }
 
 template<typename T>
 void destroy(Allocator a, String s){
-	mem_free(a, s.raw_data(), sizeof(T) * s.len(), alignof(T));
+	a.free(s.raw_data(), sizeof(T) * s.len(), alignof(T));
 }
 
 //// Virtual Memory ///////////////////////////////////////////////////////////
-constexpr Size mem_page_size = 4096;
+constexpr isize mem_page_size = 4096;
 
 struct PageBlock {
-	Size reserved;
-	Size commited;
+	isize reserved;
+	isize commited;
 	void* pointer;
 
-	void* push(Size nbytes);
+	void* push(isize nbytes);
 
-	void pop(Size nbytes);
+	void pop(isize nbytes);
 
 	void destroy();
 
-	static PageBlock make(Size nbytes);
+	static PageBlock make(isize nbytes);
 };
 
-void* virtual_reserve(Size nbytes);
+void* virtual_reserve(isize nbytes);
 
-void virtual_release(void* pointer, Size nbytes);
+void virtual_release(void* pointer, isize nbytes);
 
-bool virtual_protect(void* pointer, U32 prot);
+bool virtual_protect(void* pointer, u32 prot);
 
-void* virtual_commit(void* pointer, Size nbytes);
+void* virtual_commit(void* pointer, isize nbytes);
 
-void virtual_decommit(void* pointer, Size nbytes);
+void virtual_decommit(void* pointer, isize nbytes);
 
 
 //// Arena ////////////////////////////////////////////////////////////////////
-enum struct ArenaType : U32 {
+enum struct ArenaType : u32 {
 	Buffer  = 0,
 	Virtual = 1,
 };
 
 struct Arena {
 	PageBlock data;
-	Size offset;
-	Uintptr last_allocation;
+	isize offset;
+	uintptr last_allocation;
 	ArenaType type;
 
-	void* alloc(Size nbytes, Size align);
+	void* alloc(isize nbytes, isize align);
 
-	void* resize_in_place(void* ptr, Size new_size);
+	void* resize_in_place(void* ptr, isize new_size);
 
-	void* realloc(void* ptr, Size old_size, Size new_size, Size align);
+	void* realloc(void* ptr, isize old_size, isize new_size, isize align);
 
 	void free_all();
 
@@ -532,35 +508,32 @@ struct Arena {
 
 	Allocator as_allocator();
 
-	static Arena from_buffer(Slice<U8> buf);
+	static Arena from_buffer(Slice<u8> buf);
 
-	static Arena make_virtual(Size reserve);
+	static Arena make_virtual(isize reserve);
 };
-
-
-
 
 //// Dynamic Array ////////////////////////////////////////////////////////////
 template<typename T>
 struct DynamicArray {
 	T*        _data;
-	Size      _capacity;
-	Size      _length;
+	isize     _capacity;
+	isize     _length;
 	Allocator _allocator;
 
-	T& operator[](Size idx){
+	T& operator[](isize idx){
 		bounds_check_assert(idx >= 0 && idx < _length, "Out of bounds access to dynamic array");
 		return _data[idx];
 	}
 
-	T const& operator[](Size idx) const{
+	T const& operator[](isize idx) const{
 		bounds_check_assert(idx >= 0 && idx < _length, "Out of bounds access to dynamic array");
 		return _data[idx];
 	}
 
-	Slice<T> operator[](Pair<Size> range){
-		Size from = range.a;
-		Size to = range.b;
+	Slice<T> operator[](Pair<isize> range){
+		isize from = range.a;
+		isize to = range.b;
 
 		bounds_check_assert(from >= 0 && from < _length && to >= 0 && to <= _length && from <= to, "Index to sub-slice is out of bounds");
 
@@ -575,7 +548,7 @@ struct DynamicArray {
 	}
 
 	void destroy(){
-		mem_free(_allocator, _data, _capacity * sizeof(T), alignof(T));
+		_allocator.free(_data, _capacity * sizeof(T), alignof(T));
 	}
 
 	Slice<T> as_slice(){
@@ -584,9 +557,8 @@ struct DynamicArray {
 
 	bool append(T elem){
 		[[unlikely]] if(_length >= _capacity){
-			Size new_cap = mem_align_forward_size(_length * 2, 16);
-			auto new_data = (T*)mem_realloc(
-					_allocator,
+			isize new_cap = mem_align_forward_size(_length * 2, 16);
+			auto new_data = (T*)_allocator.realloc(
 					_data,
 					_capacity * sizeof(T),
 					new_cap, alignof(T));
@@ -607,20 +579,20 @@ struct DynamicArray {
 		return v;
 	}
 
-	bool insert(Size idx, T elem){
+	bool insert(isize idx, T elem){
 		bounds_check_assert(idx >= 0 && idx <= _length, "Out of bounds index to insert_swap");
 		if(idx == _length){ return append(this, elem); }
 
 		bool ok = append(this, elem);
 		if(!ok){ return false; }
 
-		Size nbytes = sizeof(T) * (_length - 1 - idx);
+		isize nbytes = sizeof(T) * (_length - 1 - idx);
 		mem_copy(&_data[idx + 1], &_data[idx], nbytes);
 		_data[idx] = elem;
 		return true;
 	}
 
-	bool insert_swap(Size idx, T elem){
+	bool insert_swap(isize idx, T elem){
 		bounds_check_assert(idx >= 0 && idx <= _length, "Out of bounds index to insert_swap");
 		if(idx == _length){ return append(this, elem); }
 
@@ -631,32 +603,32 @@ struct DynamicArray {
 		return true;
 	}
 
-	void remove_swap(Size idx){
+	void remove_swap(isize idx){
 		bounds_check_assert(idx >= 0 && idx < _length, "Out of bounds index to remove_swap");
 		T last = _data[_length - 1];
 		_data[idx] = last;
 		_length -= 1;
 	}
 
-	void remove(Size idx){
+	void remove(isize idx){
 		bounds_check_assert(idx >= 0 && idx < _length, "Out of bounds index to remove");
-		Size nbytes = sizeof(T) * (_length - idx + 1);
+		isize nbytes = sizeof(T) * (_length - idx + 1);
 		mem_copy(&_data[idx], &_data[idx+1], nbytes);
 		_length -= 1;
 	}
 
-	static DynamicArray<T> make(Allocator alloc, Size initial_cap = 16){
+	static DynamicArray<T> make(Allocator alloc, isize initial_cap = 16){
 		DynamicArray<T> arr;
 		arr._capacity = initial_cap;
 		arr._length = 0;
 		arr._allocator = alloc;
-		arr._data = (T*)mem_alloc(alloc, initial_cap * sizeof(T), alignof(T));
+		arr._data = (T*)alloc.alloc(initial_cap * sizeof(T), alignof(T));
 		return arr;
 	}
 
 	// Accessors
-	Size len() const { return _length; }
-	Size cap() const { return _capacity; }
+	isize len() const { return _length; }
+	isize cap() const { return _capacity; }
 	T* raw_data() const { return _data; }
 	Allocator allocator() const { return _allocator; }
 };
@@ -665,40 +637,40 @@ struct DynamicArray {
 #include "debug_print.cpp"
 
 static inline
-U64 map_hash_fnv64(Byte const * data, Size nbytes){
-	constexpr U64 prime = 0x100000001b3ull;
-	constexpr U64 offset_basis = 0xcbf29ce484222325ull;
+u64 map_hash_fnv64(byte const * data, isize nbytes){
+	constexpr u64 prime = 0x100000001b3ull;
+	constexpr u64 offset_basis = 0xcbf29ce484222325ull;
 
-	U64 hash = offset_basis;
-	for(Size i = 0; i < nbytes; i ++){
-		auto b = U64(data[i]);
+	u64 hash = offset_basis;
+	for(isize i = 0; i < nbytes; i ++){
+		auto b = u64(data[i]);
 		hash = hash ^ b;
 		hash = hash * prime;
 	}
 
-	return hash | U64(hash == 0);
+	return hash | u64(hash == 0);
 }
 
 template<typename K, typename V>
 struct MapSlot {
 	K key;
 	V value;
-	U64 hash;
+	u64 hash;
 	MapSlot* next;
 };
 
 template<typename K, typename V>
 struct Map {
 	MapSlot<K, V>* base_slots;
-	Size capacity;
+	isize capacity;
 	Allocator allocator;
 };
 
 template<typename K, typename V>
-Map<K, V> map_create(Allocator allocator, Size capacity){
+Map<K, V> map_create(Allocator allocator, isize capacity){
 	ensure((capacity & (capacity - 1)) == 0, "Capacity must be a power of 2");
 	Map<K, V> m;
-	auto base_slots = mem_alloc(allocator, capacity * sizeof(MapSlot<K, V>), alignof(MapSlot<K, V>));
+	auto base_slots = allocator.alloc(capacity * sizeof(MapSlot<K, V>), alignof(MapSlot<K, V>));
 	if(!base_slots){ return m; }
 
 	m.base_slots = static_cast<MapSlot<K, V>*>(base_slots);
@@ -710,31 +682,31 @@ Map<K, V> map_create(Allocator allocator, Size capacity){
 
 template<typename K, typename V>
 void destroy(Map<K, V>* map){
-	constexpr Size slot_size = sizeof(MapSlot<K, V>);
-	constexpr Size slot_align = alignof(MapSlot<K, V>);
-	for(Size i = 0; i < map->capacity; i++){
+	constexpr isize slot_size = sizeof(MapSlot<K, V>);
+	constexpr isize slot_align = alignof(MapSlot<K, V>);
+	for(isize i = 0; i < map->capacity; i++){
 		MapSlot<K, V>* next = nullptr;
 		for(MapSlot<K, V>* slot = map->base_slots[i].next; slot != nullptr; slot = next){
 			next = slot->next;
-			mem_free(map->allocator, (Byte*)slot, slot_size, slot_align);
+			map->allocator.free((byte*)slot, slot_size, slot_align);
 		}
 	}
 
-	mem_free(map->allocator, (Byte*)map->base_slots, slot_size * map->capacity, slot_align);
+	mem_free(map->allocator, (byte*)map->base_slots, slot_size * map->capacity, slot_align);
 }
 
 template<typename K, typename V>
-Pair<Size, U64> map_slot_offset(Map<K, V>* map, K key){
-	auto data   = (Byte const*)&key;
+Pair<isize, u64> map_slot_offset(Map<K, V>* map, K key){
+	auto data   = (byte const*)&key;
 	auto hash   = map_hash_fnv64(data, sizeof(key));
-	Size pos    = Size(hash & (map->capacity - 1));
+	isize pos    = isize(hash & (map->capacity - 1));
 	return {pos, hash};
 }
 
 template<typename V>
-Pair<Size, U64> map_slot_offset(Map<String, V>* map, String key){
+Pair<isize, u64> map_slot_offset(Map<String, V>* map, String key){
 	auto hash   = map_hash_fnv64(key.raw_data(), key.len());
-	Size pos    = Size(hash & (map->capacity - 1));
+	isize pos    = isize(hash & (map->capacity - 1));
 	return {pos, hash};
 }
 
@@ -790,13 +762,13 @@ String str_trim_leading(String s, String cutset);
 
 String str_trim_trailing(String s, String cutset);
 
-Size str_rune_count(String s);
+isize str_rune_count(String s);
 
 bool str_starts_with(String s, String prefix);
 
 bool str_ends_with(String s, String suffix);
 
-Option<Size> str_find(String s, String substr, Size start = 0);
+isize str_find(String s, String substr, isize start = 0);
 
 [[nodiscard]]
 String str_clone(String s, Allocator allocator);
@@ -806,15 +778,15 @@ String str_concat(String s0, String s1, Allocator allocator);
 
 //// String Builder ///////////////////////////////////////////////////////////
 // struct StringBuilder {
-// 	DynamicArray<Byte> buffer;
+// 	DynamicArray<byte> buffer;
 // };
 //
 // StringBuilder str_builder_create(Allocator allocator);
 //
 // void str_append(StringBuilder* sb, String v);
-// void str_append(StringBuilder* sb, Rune v);
-// void str_append(StringBuilder* sb, I64 v);
-// void str_append(StringBuilder* sb, F64 v);
+// void str_append(StringBuilder* sb, rune v);
+// void str_append(StringBuilder* sb, i64 v);
+// void str_append(StringBuilder* sb, f64 v);
 // void str_append(StringBuilder* sb, bool v);
 
 //// SIMD /////////////////////////////////////////////////////////////////////
@@ -822,32 +794,32 @@ namespace simd {
 #define VECTOR_DECL(T, N) __attribute__((vector_size((N) * sizeof(T)))) T;
 
 // 128-bit
-using I8x16 = VECTOR_DECL(I8, 16);
-using I16x8 = VECTOR_DECL(I16, 8);
-using I32x4 = VECTOR_DECL(I32, 4);
-using I64x2 = VECTOR_DECL(I64, 2);
+using i8x16 = VECTOR_DECL(i8, 16);
+using i16x8 = VECTOR_DECL(i16, 8);
+using i32x4 = VECTOR_DECL(i32, 4);
+using i64x2 = VECTOR_DECL(i64, 2);
 
-using U8x16 = VECTOR_DECL(U8, 16);
-using U16x8 = VECTOR_DECL(U16, 8);
-using U32x4 = VECTOR_DECL(U32, 4);
-using U64x2 = VECTOR_DECL(U64, 2);
+using u8x16 = VECTOR_DECL(u8, 16);
+using u16x8 = VECTOR_DECL(u16, 8);
+using u32x4 = VECTOR_DECL(u32, 4);
+using u64x2 = VECTOR_DECL(u64, 2);
 
-using F32x4 = VECTOR_DECL(F32, 4);
-using F64x2 = VECTOR_DECL(F64, 2);
+using f32x4 = VECTOR_DECL(f32, 4);
+using f64x2 = VECTOR_DECL(f64, 2);
 
 // 256-bit
-using I8x32  = VECTOR_DECL(I8, 32);
-using I16x16 = VECTOR_DECL(I16, 16);
-using I32x8  = VECTOR_DECL(I32, 8);
-using I64x4  = VECTOR_DECL(I64, 4);
+using i8x32  = VECTOR_DECL(i8, 32);
+using i16x16 = VECTOR_DECL(i16, 16);
+using i32x8  = VECTOR_DECL(i32, 8);
+using i64x4  = VECTOR_DECL(i64, 4);
 
-using U8x32  = VECTOR_DECL(U8, 32);
-using U16x16 = VECTOR_DECL(U16, 16);
-using U32x8  = VECTOR_DECL(U32, 8);
-using U64x4  = VECTOR_DECL(U64, 4);
+using u8x32  = VECTOR_DECL(u8, 32);
+using u16x16 = VECTOR_DECL(u16, 16);
+using u32x8  = VECTOR_DECL(u32, 8);
+using u64x4  = VECTOR_DECL(u64, 4);
 
-using F32x8 = VECTOR_DECL(F32, 8);
-using F64x4 = VECTOR_DECL(F64, 4);
+using f32x8 = VECTOR_DECL(f32, 8);
+using f64x4 = VECTOR_DECL(f64, 4);
 }
 
 #endif /* Include guard */

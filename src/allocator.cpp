@@ -1,6 +1,6 @@
 #include "base.hpp"
 
-// enum class Allocator_Op : Byte {
+// enum class Allocator_Op : byte {
 // 	Query    = 0, // Query allocator's capabilities
 // 	Alloc    = 1, // Allocate a chunk of memory
 // 	Resize   = 2, // Resize an allocation in-place
@@ -9,7 +9,7 @@
 // 	Realloc  = 5, // Re-allocate pointer
 // };
 //
-// enum class Allocator_Capability : U32 {
+// enum class Allocator_Capability : u32 {
 // 	Alloc_Any = 1 << 0, // Can alloc any size
 // 	Free_Any  = 1 << 1, // Can free in any order
 // 	Free_All  = 1 << 2, // Can free all allocations
@@ -22,9 +22,9 @@
 // 	void* impl,
 // 	Allocator_Op op,
 // 	void* old_ptr,
-// 	Size size,
-// 	Size align,
-// 	U32* capabilities
+// 	isize size,
+// 	isize align,
+// 	u32* capabilities
 // );
 //
 // // Memory allocator interface
@@ -33,26 +33,26 @@
 // 	Allocator_Func _func{0};
 //
 // 	// Get capabilities of allocator as a number, gets capability bit-set
-// 	U32 query_capabilites(){
-// 		U32 n = 0;
+// 	u32 query_capabilites(){
+// 		u32 n = 0;
 // 		_func(_impl, Allocator_Op::Query, nullptr, 0, 0, &n);
 // 		return n;
 // 	}
 //
 // 	// Allocate fresh memory, filled with 0s. Returns NULL on failure.
-// 	void* alloc(Size size, Size align){
+// 	void* alloc(isize size, isize align){
 // 		return _func(_impl, Allocator_Op::Alloc, nullptr, size, align, nullptr);
 // 	}
 //
 // 	// Re-allocate memory in-place without changing the original pointer. Returns
 // 	// NULL on failure.
-// 	void* resize(void* ptr, Size new_size){
+// 	void* resize(void* ptr, isize new_size){
 // 		return _func(_impl, Allocator_Op::Resize, ptr, new_size, 0, nullptr);
 // 	}
 //
 // 	// Free pointer to memory, includes alignment information, which is required for
 // 	// some allocators, freeing NULL is a no-op
-// 	void free(void* ptr, Size size, Size align){
+// 	void free(void* ptr, isize size, isize align){
 // 		_func(_impl, Allocator_Op::Free, ptr, size, align, nullptr);
 // 	}
 //
@@ -74,10 +74,10 @@
 //
 // // Helper to create any type
 // template<typename T>
-// Slice<T> make(Size n){
+// Slice<T> make(isize n){
 // 	auto p = (T*)this->alloc(n * sizeof(T), alignof(T));
 // 	if(p != nullptr){
-// 		for(Size i = 0; i < n; i++){
+// 		for(isize i = 0; i < n; i++){
 // 			new (&p[i]) T();
 // 		}
 // 	}
@@ -94,6 +94,6 @@
 // template<typename T>
 // void destroy(Slice<T> s){
 // 	T* buf = s.raw_data();
-// 	Size n = s.size();
+// 	isize n = s.size();
 // 	this->free((void*)buf, n * sizeof(T), alignof(T));
 // }

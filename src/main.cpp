@@ -3,7 +3,7 @@
 
 template<typename K, typename V>
 std::ostream& operator<<(std::ostream& os, Map<K, V> map){
-	for(Size i = 0; i < map.capacity; i ++){
+	for(isize i = 0; i < map.capacity; i ++){
 		auto head = &map.base_slots[i];
 
 		os << "[" << i << "]\t";
@@ -20,13 +20,13 @@ std::ostream& operator<<(std::ostream& os, Map<K, V> map){
 	return os;
 }
 
-template<typename T>
-std::ostream& operator<<(std::ostream& os, Option<T> v){
+template<typename T, typename E>
+std::ostream& operator<<(std::ostream& os, Result<T, E> v){
 	if(!v.ok()){
-		os << "Option(nil)";
+		os << "Error(" << v.error << ")";
 	}
 	else {
-		os << "Option(" << v.unwrap_unchecked() << ")";
+		os << "Value(" << v.value << ")";
 	}
 	return os;
 }
@@ -35,23 +35,23 @@ int main(){
 	auto arena = Arena::make_virtual(10 * mem_MiB);
 	auto allocator = arena.as_allocator();
 
-	auto arr = DynamicArray<I32*>::make(allocator);
+	auto arr = DynamicArray<i32*>::make(allocator);
 	defer(arr.destroy());
-	I32 n = 0;
-	print(sizeof(Option<U8>));
-	print(sizeof(Option<U8*>));
+	i32 n = 0;
+	print(sizeof(Result<u32, String>));
 
 	arr.append(&n);
 	arr.append(&n);
 	arr.append(&n);
 	arr.append(&n);
+
 	arr.append(nullptr);
 
 	arr.remove_swap(0);
 
 	print(arr.as_slice());
-	// auto map = map_create<String, I32>(allocator, 8);
-	// auto map2 = map_create<I32, String>(allocator, 8);
+	// auto map = map_create<String, i32>(allocator, 8);
+	// auto map2 = map_create<i32, String>(allocator, 8);
 	// defer(destroy(&map));
 	// defer(destroy(&map2));
 
@@ -59,7 +59,7 @@ int main(){
 	// print(map2);
 	// map_set(&map2, 69, "CU");
 
-	// auto e = Option<I32>{1};
+	// auto e = Option<i32>{1};
 	// print(e);
 	// e.clear();
 	// print(e.or_else(69u));

@@ -1,6 +1,6 @@
 #include "base.hpp"
 
-PageBlock PageBlock::make(Size nbytes){
+PageBlock PageBlock::make(isize nbytes){
 	nbytes = mem_align_forward_size(nbytes, mem_page_size);
 	void* ptr = virtual_reserve(nbytes);
 	PageBlock blk = {
@@ -15,9 +15,9 @@ void PageBlock::destroy(){
 	virtual_release(pointer, reserved);
 }
 
-void* PageBlock::push(Size nbytes){
+void* PageBlock::push(isize nbytes){
 	nbytes = mem_align_forward_size(nbytes, mem_page_size);
-	U8* old_ptr = (U8*)pointer + commited;
+	u8* old_ptr = (u8*)pointer + commited;
 	void* new_ptr = virtual_commit(old_ptr, nbytes);
 
 	if(new_ptr == nullptr){
@@ -27,15 +27,15 @@ void* PageBlock::push(Size nbytes){
 	return old_ptr;
 }
 
-void PageBlock::pop(Size nbytes){
-	nbytes = clamp<Size>(0, nbytes, commited);
+void PageBlock::pop(isize nbytes){
+	nbytes = clamp<isize>(0, nbytes, commited);
 
-	Uintptr base = (Uintptr)pointer;
+	uintptr base = (uintptr)pointer;
 	// Free pages *after* this location
-	Uintptr free_after = base + (commited - nbytes);
+	uintptr free_after = base + (commited - nbytes);
 	free_after = mem_align_forward_ptr(free_after, mem_page_size);
 
-	Size amount_to_free = (base + commited) - free_after;
+	isize amount_to_free = (base + commited) - free_after;
 	virtual_decommit((void*)free_after, amount_to_free);
 	commited -= amount_to_free;
 }

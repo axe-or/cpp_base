@@ -26,7 +26,7 @@ std::ostream& operator<<(std::ostream& os, String s){
 template<typename T>
 std::ostream& operator<<(std::ostream& os, Slice<T> s){
 	os << '[';
-	for(Size i = 0; i < s.len(); i++){
+	for(isize i = 0; i < s.len(); i++){
 		if(i > 0) os << ' ';
 		os << s[i];
 	}
