@@ -15,37 +15,52 @@ Result<void*, MemoryError> arena_allocator_func(
 	using M = AllocatorMode;
 	using C = AllocatorCapability;
 
+	Result<void*, MemoryError> res;
+
 	switch (op) {
 	case M::Query: {
 		*capabilities = u32(C::AlignAny) | u32(C::AllocAny) | u32(C::FreeAll);
-		return nullptr;
+		return res;
 	}
 
 	case M::Alloc:{
-		void* p = arena->alloc(size, align);
-		[[unlikely]] if(!p){ return MemoryError::OutOfMemory; }
-		return p;
+		res.value = arena->alloc(size, align);
+		[[unlikely]] if(!res.value) {
+			res.error = MemoryError::OutOfMemory;
+		}
+		return res;
+
 	} break;
 
 	case M::Resize: {
-		void* p = arena->resize_in_place(old_ptr, size);
-		[[unlikely]] if(!p){ return MemoryError::ResizeFailed; }
+		res.value = arena->resize_in_place(old_ptr, size);
+		[[unlikely]]
+		if(!res.value){
+			res.error = MemoryError::ResizeFailed;
+		}
+		return res;
 	};
 
-	case M::Free:
-		return nullptr;
-
-	case M::FreeAll:
-		arena->free_all();
-		return nullptr;
-
-	case M::Realloc:
-		void* p = arena->realloc(old_ptr, old_size, size, align);
-		[[unlikely]] if(!p){ return MemoryError::OutOfMemory; }
-		return p;
+	case M::Free: {
+		return res;
 	}
 
-	return MemoryError::UnknownMode;
+	case M::FreeAll: {
+		arena->free_all();
+		return res;
+	}
+
+	case M::Realloc:
+		res.value = arena->realloc(old_ptr, old_size, size, align);
+		[[unlikely]]
+		if(!res.value){
+			res.error = MemoryError::OutOfMemory;
+		}
+		return res;
+	}
+
+	res.error = MemoryError::UnknownMode;
+	return res;
 }
 
 Allocator Arena::as_allocator(){

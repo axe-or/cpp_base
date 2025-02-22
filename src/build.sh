@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 cc=clang++
-cflags='-std=c++17 -Wall -Wextra'
+cflags='-std=c++20 -Wall -Wextra'
 
 buildMode="$1"
 

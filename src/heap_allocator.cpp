@@ -13,33 +13,39 @@ Result<void*, MemoryError> mem_heap_allocator_func(
 ){
 	using M = AllocatorMode;
 	using C = AllocatorCapability;
+
+	Result<void*, MemoryError> res = {nullptr, MemoryError::None};
+
 	switch (op) {
 		case M::Query: {
 			*capabilities = u32(C::AllocAny) | u32(C::FreeAny) | u32(C::AlignAny);
-			return nullptr;
+			return res;
 		}
 
 		case M::Alloc: {
-			byte* p = new (std::align_val_t(align)) byte[size];
-			[[likely]] if(p != nullptr){
-				mem_set(p, 0, size);
+			res.value = new (std::align_val_t(align)) byte[size];
+			[[likely]] if(res.value != nullptr){
+				mem_set(res.value, 0, size);
 			} else {
-				return MemoryError::OutOfMemory;
+				res.error = MemoryError::OutOfMemory;
 			}
-			return p;
+			return res;
 		}
 
 		case M::Resize: {
-			return MemoryError::ResizeFailed;
+			res.error = MemoryError::ResizeFailed;
+			return res;
 		}
 
 		case M::Free: {
 			byte* old_p = (byte*)old_ptr;
 			operator delete[](old_p, std::align_val_t(align));
-			return nullptr;
+			return res;
 		};
 
-		case M::FreeAll: return nullptr;
+		case M::FreeAll: {
+			return res;
+		}
 
 		case M::Realloc: {
 			byte* new_p = new (std::align_val_t(align)) byte[size];
@@ -49,13 +55,15 @@ Result<void*, MemoryError> mem_heap_allocator_func(
 				mem_copy_no_overlap(new_p, old_p, nbytes);
 				operator delete[](old_p, std::align_val_t(align));
 			} else {
-				return MemoryError::OutOfMemory;
+				res.error = MemoryError::OutOfMemory;
 			}
-			return new_p;
+			res.value = new_p;
+			return res;
 		}
 	}
 
-	return MemoryError::UnknownMode;
+	res.error = MemoryError::UnknownMode;
+	return res;
 }
 
 Allocator heap_allocator(){

@@ -35,8 +35,10 @@ int main(){
 	auto arena = Arena::make_virtual(10 * mem_MiB);
 	auto allocator = arena.as_allocator();
 
-	auto arr = DynamicArray<i32*>::make(allocator).unwrap();
+	auto [arr, err] = DynamicArray<i32*>::make(allocator);
+	ensure(ok(err), "Failed to create dyn arr");
 	defer(arr.destroy());
+
 	i32 n = 0;
 	print(sizeof(Result<u32, String>));
 

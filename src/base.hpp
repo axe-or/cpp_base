@@ -127,39 +127,23 @@ void ensure(bool pred, char const * msg);
 
 void bounds_check_assert(bool pred, char const * msg);
 
+// Same as a Pair, just with explicit naming for error handling.
 template<typename Value, typename Error>
 struct Result {
-	static_assert(!meta::same_type<Value, Error>, "Value and Error must not be the same types");
-	union {
-		Value value;
-		Error error{};
-	};
-	u8 has_value;
-
-	Value unwrap(){
-		ensure(has_value, "Cannot unwrap error result");
-		return value;
-	}
-
-	Error unwrap_error(){
-		ensure(has_value, "Cannot unwrap_error value result");
-		return error;
-	}
-
-	Value or_else(Value alt){
-		if(has_value){
-			return value;
-		} else {
-			return alt;
-		}
-	}
-
-	Result() : has_value{false} {}
-	Result(Value v) : value{v}, has_value{true} {}
-	Result(Error e) : error{e}, has_value{false} {}
-
-	bool ok(){ return has_value; }
+	Value value{};
+	Error error{0};
 };
+
+// Used for error handling, this assumes that the no-error value of a Error enum is always 0.
+template<typename ErrorEnum>
+bool ok(ErrorEnum v){
+	return i32(v) == 0;
+}
+
+template<typename Value, typename Error>
+bool ok(Result<Value, Error> v){
+	return i32(v.error) == 0;
+}
 
 template<typename T>
 struct Slice {
@@ -441,14 +425,14 @@ struct Allocator {
 
 template<typename T> [[nodiscard]]
 T* make(Allocator a){
-	T* p = (T*)a.alloc(sizeof(T), alignof(T)).or_else(nullptr);
-	return p;
+	auto [p, _] = a.alloc(sizeof(T), alignof(T));
+	return (T*)p;
 }
 
 template<typename T> [[nodiscard]]
 Slice<T> make(Allocator a, isize elems){
-	T* p = (T*)a.alloc(sizeof(T) * elems, alignof(T)).or_else(nullptr);
-	return Slice<T>(p, p == nullptr ? 0 : elems);
+	auto [p, _] = a.alloc(sizeof(T) * elems, alignof(T));
+	return Slice<T>((T*)p, p == nullptr ? 0 : elems);
 }
 
 template<typename T>
@@ -568,11 +552,11 @@ struct DynamicArray {
 	bool append(T elem){
 		[[unlikely]] if(_length >= _capacity){
 			isize new_cap = mem_align_forward_size(_length * 2, 16);
-			auto new_data = _allocator.realloc(_data, _capacity * sizeof(T), new_cap, alignof(T));
-			if(!new_data.ok()){
+			auto [new_data, error] = _allocator.realloc(_data, _capacity * sizeof(T), new_cap, alignof(T));
+			if(!ok(error)){
 				return false;
 			}
-			_data = (T*)new_data.value;
+			_data = (T*)new_data;
 		}
 		_data[_length] = elem;
 		_length += 1;
@@ -624,19 +608,19 @@ struct DynamicArray {
 		_length -= 1;
 	}
 
-	static Result<DynamicArray<T>, MemoryError> make(Allocator alloc, isize initial_cap = 16){
+	static Pair<DynamicArray<T>, MemoryError> make(Allocator alloc, isize initial_cap = 16){
 		DynamicArray<T> arr;
 		arr._capacity = initial_cap;
 		arr._length = 0;
 		arr._allocator = alloc;
 
-		auto buffer = alloc.alloc(initial_cap * sizeof(T), alignof(T));
-		if(!buffer.ok()){
-			return buffer.error;
+		auto [buffer, error] = alloc.alloc(initial_cap * sizeof(T), alignof(T));
+		if(!ok(error)){
+			return {arr, error};
 		}
-		arr._data = (T*)buffer.value;
+		arr._data = (T*)buffer;
 
-		return arr;
+		return {arr, MemoryError::None};
 	}
 
 	// Accessors
